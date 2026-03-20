@@ -227,6 +227,24 @@ pub async fn lastfm_logout(
         cancel.cancel();
     }
 
+    // Last.fm ポーリング（Scrobbling）も停止
+    let was_polling = {
+        let mut inner = state.0.lock().unwrap();
+        if let Some(token) = inner.poll_cancel_token.take() {
+            token.cancel();
+            true
+        } else {
+            false
+        }
+    };
+    if was_polling {
+        app.emit(
+            "polling-status-changed",
+            serde_json::json!({ "running": false }),
+        )
+        .map_err(|e| e.to_string())?;
+    }
+
     // keyring から session_key を削除
     if let Ok(entry) = Entry::new(KEYRING_SERVICE, KEYRING_SESSION_KEY) {
         let _ = entry.delete_password();
@@ -235,10 +253,40 @@ pub async fn lastfm_logout(
     {
         let mut inner = state.0.lock().unwrap();
         inner.pending_auth_token = None;
+        inner.settings.lastfm_username = String::new();
         inner.auth_status = AuthStatus {
             authenticated: false,
             username: None,
         };
+    }
+
+    // username を Store からも削除
+    if let Ok(store) = app.store(STORE_PATH) {
+        if let Ok(mut settings) = store
+            .get(STORE_KEY)
+            .and_then(|v| serde_json::from_value::<crate::models::settings::Settings>(v).ok())
+            .ok_or(())
+        {
+            settings.lastfm_username = String::new();
+            if let Ok(val) = serde_json::to_value(&settings) {
+                store.set(STORE_KEY, val);
+                let _ = store.save();
+            }
+        }
+    }
+
+    // Discord Rich Presence をクリア
+    {
+        let discord_client = {
+            let inner = state.0.lock().unwrap();
+            std::sync::Arc::clone(&inner.discord_client)
+        };
+        let mut client = discord_client.lock().unwrap();
+        if client.is_connected() {
+            if let Err(e) = client.clear_activity() {
+                warn!("clear_activity on logout: {e}");
+            }
+        }
     }
 
     app.emit(

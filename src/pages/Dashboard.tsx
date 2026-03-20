@@ -15,6 +15,7 @@ interface DashboardProps {
 export default function Dashboard({ onNavigateSettings }: DashboardProps) {
   const pollingRunning = useAppStore((s) => s.pollingRunning);
   const lastfm = useAppStore((s) => s.lastfmStatus);
+  const discord = useAppStore((s) => s.discordStatus);
 
   const handleTogglePolling = useCallback(async () => {
     try {
@@ -35,7 +36,7 @@ export default function Dashboard({ onNavigateSettings }: DashboardProps) {
       {/* タイトルバー */}
       <TitleBar>
         <span className="text-sm font-semibold text-foreground/80">Scrobcord</span>
-        {pollingRunning && (
+        {pollingRunning && isReady && (
           <span className="ml-2 flex items-center gap-1 text-xs text-green-400">
             <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-green-400" />
             Scrobbling
@@ -52,7 +53,7 @@ export default function Dashboard({ onNavigateSettings }: DashboardProps) {
           {!isReady ? (
             <div className="flex h-full flex-col items-center justify-center gap-2 p-6 text-center text-muted-foreground">
               <p className="text-sm">Last.fm アカウントが未接続です。</p>
-              <p className="text-xs opacity-70">設定から API キーとアカウントを連携してください。</p>
+              <p className="text-xs opacity-70">設定から Last.fm にログインしてください。</p>
             </div>
           ) : (
             <NowPlayingCard />
@@ -68,13 +69,13 @@ export default function Dashboard({ onNavigateSettings }: DashboardProps) {
           <div className="mx-3 mb-4 mt-3 h-px bg-border" />
           <div className="flex justify-center gap-4 px-4 pb-4">
             <Button
-              variant={pollingRunning ? "destructive" : "default"}
+              variant={isReady && pollingRunning ? "destructive" : "default"}
               size="default"
               className="w-32"
               onClick={handleTogglePolling}
               disabled={!isReady}
             >
-              {pollingRunning ? (
+              {isReady && pollingRunning ? (
                 <><Square className="mr-1.5 h-4 w-4" /> 停止</>
               ) : (
                 <><Play className="mr-1.5 h-4 w-4" /> 開始</>
