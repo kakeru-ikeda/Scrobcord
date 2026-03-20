@@ -179,6 +179,8 @@ mod tests {
             discord_enabled: false,
             rpc_details_format: "{track}".to_string(),
             rpc_state_format: "{artist}".to_string(),
+            rpc_name_format: "{track}".to_string(),
+            rpc_use_listening_type: true,
             rpc_show_album_art: false,
             rpc_show_timestamp: false,
             rpc_show_lastfm_button: true,

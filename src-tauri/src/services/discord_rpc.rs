@@ -76,13 +76,22 @@ fn send_rpc_command(stream: &mut dyn ReadWrite, payload: &Value) -> Result<(), S
     log::debug!("Sending RPC command: {}", payload);
     write_frame(stream, OP_FRAME, payload)?;
 
-    for _ in 0..8 {
+    // PONGフレームはカウントせず読み飛ばす（ping()の未消費フレームが溜まっていても影響しないように）
+    let mut non_pong = 0;
+    loop {
+        if non_pong >= 8 {
+            return Err("Discord RPC 応答を受信できませんでした".to_string());
+        }
         let (op, resp) = read_frame(stream)?;
         log::debug!("Received RPC frame: op={}, data={}", op, resp);
         match op {
             OP_CLOSE => return Err(format!("Discord が接続を閉じました: {resp}")),
             OP_PING => {
                 write_frame(stream, OP_PONG, &resp)?;
+                non_pong += 1;
+            }
+            OP_PONG => {
+                // ping() の余剰 PONG は読み飛ばす（ループカウントしない）
             }
             OP_FRAME => {
                 if resp["evt"].as_str() == Some("ERROR") {
@@ -92,12 +101,13 @@ fn send_rpc_command(stream: &mut dyn ReadWrite, payload: &Value) -> Result<(), S
                 if resp["nonce"] == payload["nonce"] {
                     return Ok(());
                 }
+                non_pong += 1;
             }
-            _ => {}
+            _ => {
+                non_pong += 1;
+            }
         }
     }
-
-    Err("Discord RPC 応答を受信できませんでした".to_string())
 }
 
 // ---------------------------------------------------------------------------
@@ -269,6 +279,13 @@ impl DiscordRpcClient {
             activity.insert("state".to_string(), state_str.into());
         }
 
+        if settings.rpc_use_listening_type {
+            if let Some(name_str) = valid_rpc_str(&format_rpc(&settings.rpc_name_format, track)) {
+                activity.insert("name".to_string(), name_str.into());
+            }
+            activity.insert("type".to_string(), 2.into()); // 2 = LISTENING
+        }
+
         if settings.rpc_show_album_art {
             if let Some(ref url) = track.album_art_url {
                 if !url.is_empty() {
@@ -353,26 +370,28 @@ impl DiscordRpcClient {
         send_rpc_command(stream, &payload)
     }
 
-    /// ダミーのPINGフレームを送信して接続の生死を確認する
+    /// PINGフレームを送信してPONGを受信し、接続の生死を確認する
     pub fn ping(&mut self) -> Result<(), String> {
         let stream = self
             .stream
             .as_mut()
             .ok_or_else(|| "Discordに接続されていません".to_string())?;
 
-        // nonceを付与してPING送信
-        self.nonce += 1;
-        let payload = json!({
-            "nonce": self.nonce.to_string()
-        });
+        // PINGにnonceは不要。nonceをインクリメントしないことで
+        // SET_ACTIVITYのnonce体系を汚染しない
+        write_frame(stream, OP_PING, &json!({}))?;
 
-        // PING なので OP=3
-        write_frame(stream, OP_PING, &payload)?;
+        // PONGを受信して接続確認。途中に積まれたOP_FRAMEも最大16個まで読み飛ばす
+        for _ in 0..16 {
+            let (op, resp) = read_frame(stream)?;
+            match op {
+                OP_PONG => return Ok(()),
+                OP_CLOSE => return Err(format!("Discord が接続を閉じました: {resp}")),
+                _ => {} // 他のフレームは読み飛ばす
+            }
+        }
 
-        // PING応答は非同期に来る可能性があるためここでは受信待ちせず、
-        // 書込(write_frame)結果だけでOSレベルのパイプ切断を検知できればヨシとする。
-        // パイプが壊れていれば write_frame がエラーになって Err("Broken pipe") 等が返る
-        Ok(())
+        Err("Discord PONG を受信できませんでした".to_string())
     }
 
     /// 接続を切断する
@@ -383,6 +402,17 @@ impl DiscordRpcClient {
                 OP_CLOSE,
                 &json!({ "v": 1, "client_id": self.app_id }),
             );
+        }
+    }
+}
+
+/// プロセス強制終了時も含め、スコープを外れた時点で必ずアクティビティをクリア＆切断する
+impl Drop for DiscordRpcClient {
+    fn drop(&mut self) {
+        if self.stream.is_some() {
+            // エラーは無視（既に切れていることもある）
+            let _ = self.clear_activity();
+            self.disconnect();
         }
     }
 }

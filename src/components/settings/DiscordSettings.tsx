@@ -69,9 +69,26 @@ export default function DiscordSettings({ settings, onChange }: Props) {
         />
       </div>
 
+      {settings.rpc_use_listening_type && (
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="name-fmt">アクティビティ名フォーマット (name)</Label>
+          <Input
+            id="name-fmt"
+            value={settings.rpc_name_format}
+            onChange={(e) => onChange({ rpc_name_format: e.target.value })}
+            placeholder="{track}"
+          />
+        </div>
+      )}
+
       {/* プレビュー */}
       <div className="rounded-md bg-muted/50 px-3 py-2 text-xs">
         <p className="mb-1 text-muted-foreground">プレビュー（現在のトラック情報）</p>
+        {settings.rpc_use_listening_type && (
+          <p className="text-foreground truncate">
+            🎧 {formatPreview(settings.rpc_name_format, previewTitle, previewArtist, previewAlbum) || "—"} を聴いています
+          </p>
+        )}
         <p className="font-medium text-foreground truncate">
           {formatPreview(settings.rpc_details_format, previewTitle, previewArtist, previewAlbum) || "—"}
         </p>
@@ -82,6 +99,11 @@ export default function DiscordSettings({ settings, onChange }: Props) {
 
       {/* Toggle 群 */}
       <div className="flex flex-col gap-3">
+        <SwitchRow
+          label="音楽アクティビティ表示 (Listening)"
+          checked={settings.rpc_use_listening_type}
+          onCheckedChange={(v) => onChange({ rpc_use_listening_type: v })}
+        />
         <SwitchRow
           label="アルバムアート表示"
           checked={settings.rpc_show_album_art}

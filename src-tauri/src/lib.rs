@@ -10,6 +10,15 @@ use state::{AppState, AppStateInner};
 use std::sync::{Arc, Mutex};
 use tauri::Manager;
 
+/// Discord アクティビティをクリアして切断する（終了処理の共通実装）
+fn discord_cleanup(app: &tauri::AppHandle) {
+    let state = app.state::<AppState>();
+    let mut inner = state.0.lock().unwrap();
+    if inner.discord_client.is_connected() {
+        let _ = inner.discord_client.clear_activity();
+        inner.discord_client.disconnect();
+    }
+}
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let app_state = AppState(Arc::new(Mutex::new(AppStateInner {
@@ -54,16 +63,26 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| {
-            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                let minimize = {
-                    let state = window.state::<AppState>();
-                    let guard = state.0.lock().unwrap();
-                    guard.settings.minimize_to_tray
-                };
-                if minimize {
-                    api.prevent_close();
-                    window.hide().ok();
+            match event {
+                tauri::WindowEvent::CloseRequested { api, .. } => {
+                    let minimize = {
+                        let state = window.state::<AppState>();
+                        let guard = state.0.lock().unwrap();
+                        guard.settings.minimize_to_tray
+                    };
+                    if minimize {
+                        api.prevent_close();
+                        window.hide().ok();
+                    } else {
+                        // トレイ最小化なし: ウィンドウを閉じる = 終了なのでアクティビティをクリア
+                        discord_cleanup(window.app_handle());
+                    }
                 }
+                tauri::WindowEvent::Destroyed => {
+                    // どのケースでウィンドウが破棄されてもアクティビティをクリア
+                    discord_cleanup(window.app_handle());
+                }
+                _ => {}
             }
         })
         .invoke_handler(tauri::generate_handler![
@@ -141,7 +160,8 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
             "quit" => {
-                // ポーリングを止めてから終了
+                // アクティビティとポーリングを停止してから終了
+                discord_cleanup(app);
                 if let Some(token) = app
                     .state::<AppState>()
                     .0

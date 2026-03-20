@@ -23,6 +23,9 @@ pub fn start(app: AppHandle, state: Arc<Mutex<AppStateInner>>) -> CancellationTo
         .unwrap_or_else(|e| warn!("emit polling-status-changed: {e}"));
 
         let mut prev_track: Option<Track> = None;
+        // Last.fm が曲切り替えタイミングで一瞬 null を返すことがある。
+        // 2回連続 null を確認してから初めてアクティビティをクリアする。
+        let mut no_track_ticks: u32 = 0;
 
         loop {
             tokio::select! {
@@ -30,7 +33,7 @@ pub fn start(app: AppHandle, state: Arc<Mutex<AppStateInner>>) -> CancellationTo
                     info!("polling: cancelled");
                     break;
                 }
-                _ = poll_once(&app, &state, &mut prev_track) => {}
+                _ = poll_once(&app, &state, &mut prev_track, &mut no_track_ticks) => {}
             }
 
             let interval = { state.lock().unwrap().settings.poll_interval_secs };
@@ -65,11 +68,15 @@ pub fn start(app: AppHandle, state: Arc<Mutex<AppStateInner>>) -> CancellationTo
     token
 }
 
+/// null が何連続したらアクティビティをクリアするか（曲切り替え時の一瞬の gap を吸収）
+const CLEAR_THRESHOLD: u32 = 2;
+
 /// 1回のポーリング処理
 async fn poll_once(
     app: &AppHandle,
     state: &Arc<Mutex<AppStateInner>>,
     prev_track: &mut Option<Track>,
+    no_track_ticks: &mut u32,
 ) {
     let (configured_username, auth_username, authenticated, discord_enabled) = {
         let inner = state.lock().unwrap();
@@ -107,14 +114,25 @@ async fn poll_once(
     };
 
     match now_playing.as_ref() {
-        Some(track) => debug!(
-            "polling: detected now playing '{}' - '{}'",
-            track.artist, track.title
-        ),
-        None => debug!(
-            "polling: no now-playing track returned for user '{}'",
-            username
-        ),
+        Some(track) => {
+            debug!(
+                "polling: detected now playing '{}' - '{}'",
+                track.artist, track.title
+            );
+            *no_track_ticks = 0;
+        }
+        None => {
+            *no_track_ticks += 1;
+            debug!(
+                "polling: no now-playing track returned for user '{}' (no_track_ticks={})",
+                username, no_track_ticks
+            );
+            // CLEAR_THRESHOLD 未満の場合はアクティビティを維持する
+            // （曲切り替えタイミングで Last.fm が一瞬 null を返す "gap" を吸収）
+            if *no_track_ticks < CLEAR_THRESHOLD {
+                return;
+            }
+        }
     }
 
     let track_changed = !is_same_track(prev_track.as_ref(), now_playing.as_ref());
