@@ -49,9 +49,13 @@ pub fn start(app: AppHandle, state: Arc<Mutex<AppStateInner>>) -> CancellationTo
 
         // 停止時に Rich Presence をクリア
         {
-            let mut inner = state.lock().unwrap();
-            if inner.discord_client.is_connected() {
-                if let Err(e) = inner.discord_client.clear_activity() {
+            let discord_client = {
+                let inner = state.lock().unwrap();
+                Arc::clone(&inner.discord_client)
+            };
+            let mut client = discord_client.lock().unwrap();
+            if client.is_connected() {
+                if let Err(e) = client.clear_activity() {
                     warn!("clear_activity on stop: {e}");
                 }
             }
@@ -154,11 +158,26 @@ async fn poll_once(
     // Discord RPC 更新
     if discord_enabled {
         let settings = { state.lock().unwrap().settings.clone() };
-        update_discord(app, state, &settings, now_playing.as_ref(), track_changed);
+        let state2 = Arc::clone(state);
+        let app2 = app.clone();
+        let track_owned = now_playing.clone();
+        tokio::task::spawn_blocking(move || {
+            update_discord(
+                &app2,
+                &state2,
+                &settings,
+                track_owned.as_ref(),
+                track_changed,
+            );
+        })
+        .await
+        .unwrap_or_else(|e| warn!("update_discord spawn_blocking failed: {:?}", e));
     }
 }
 
-/// Discord RPC の状態を更新する（同期 I/O なので mutex 保持中に実行）
+/// Discord RPC の状態を更新する
+/// - spawn_blocking から呼ばれるブロッキング関数
+/// - AppStateInner の Mutex は短時間のみ保持し、重い I/O は discord_client 専用の Mutex で行う
 fn update_discord(
     app: &AppHandle,
     state: &Arc<Mutex<AppStateInner>>,
@@ -166,85 +185,82 @@ fn update_discord(
     track: Option<&Track>,
     track_changed: bool,
 ) {
-    let mut inner = state.lock().unwrap();
-    let mut status_to_emit: Option<DiscordStatus> = None;
-    let mut can_update_activity = true;
-    let mut newly_connected = false;
+    // AppStateInner から discord_client の Arc だけを短時間で取り出す
+    let discord_client = {
+        let inner = state.lock().unwrap();
+        Arc::clone(&inner.discord_client)
+    };
 
-    // 未接続なら接続を試みる
-    if !inner.discord_client.is_connected() {
-        inner.discord_client.app_id = settings.discord_app_id.clone();
-        match inner.discord_client.connect() {
+    // discord_client の Mutex を保持して I/O 処理（AppStateInner の Mutex は解放済み）
+    let mut client = discord_client.lock().unwrap();
+    let mut newly_connected = false;
+    let mut can_update_activity = true;
+    let mut final_status: Option<DiscordStatus> = None;
+
+    if !client.is_connected() {
+        client.app_id = settings.discord_app_id.clone();
+        match client.connect() {
             Ok(()) => {
-                let status = DiscordStatus {
+                newly_connected = true;
+                final_status = Some(DiscordStatus {
                     connected: true,
                     error: None,
-                };
-                inner.discord_status = status.clone();
-                status_to_emit = Some(status);
-                newly_connected = true;
+                });
             }
             Err(e) => {
                 warn!("discord connect: {e}");
-                let status = DiscordStatus {
+                final_status = Some(DiscordStatus {
                     connected: false,
                     error: Some(e),
-                };
-                inner.discord_status = status.clone();
-                status_to_emit = Some(status);
+                });
                 can_update_activity = false;
             }
         }
     } else if !track_changed {
-        // 既に接続済みで、曲も変わっていない場合は PING を送って死活監視
-        if let Err(e) = inner.discord_client.ping() {
+        // 既接続・曲変化なし → PING で死活確認
+        if let Err(e) = client.ping() {
             warn!("discord ping failed (disconnected): {e}");
-            inner.discord_client.disconnect();
-            let status = DiscordStatus {
+            client.disconnect();
+            final_status = Some(DiscordStatus {
                 connected: false,
                 error: Some(e),
-            };
-            inner.discord_status = status.clone();
-            status_to_emit = Some(status);
+            });
             can_update_activity = false;
         }
     }
 
-    if can_update_activity
-        && inner.discord_client.is_connected()
-        && (track_changed || newly_connected)
-    {
+    if can_update_activity && client.is_connected() && (track_changed || newly_connected) {
         if let Some(t) = track {
-            if let Err(e) = inner.discord_client.set_activity(t, settings) {
+            if let Err(e) = client.set_activity(t, settings) {
                 warn!("set_activity: {e}");
-                // ソケット切断の可能性があるのでリセット
-                inner.discord_client.disconnect();
-                let status = DiscordStatus {
+                client.disconnect();
+                final_status = Some(DiscordStatus {
                     connected: false,
                     error: Some(e),
-                };
-                inner.discord_status = status.clone();
-                status_to_emit = Some(status);
+                });
             } else {
                 info!("discord activity updated: '{}' - '{}'", t.artist, t.title);
             }
-        } else if let Err(e) = inner.discord_client.clear_activity() {
+        } else if let Err(e) = client.clear_activity() {
             warn!("clear_activity: {e}");
-            inner.discord_client.disconnect();
-            let status = DiscordStatus {
+            client.disconnect();
+            final_status = Some(DiscordStatus {
                 connected: false,
                 error: Some(e),
-            };
-            inner.discord_status = status.clone();
-            status_to_emit = Some(status);
+            });
         } else {
             info!("discord activity cleared");
         }
     }
 
-    drop(inner);
+    // I/O 完了後に discord_client の Mutex を解放してから AppStateInner に書き戻す
+    drop(client);
 
-    if let Some(status) = status_to_emit {
+    if let Some(ref status) = final_status {
+        state.lock().unwrap().discord_status = status.clone();
+    }
+
+    if let Some(status) = final_status {
         app.emit("discord-status-changed", &status)
             .unwrap_or_else(|e| warn!("emit discord-status-changed: {e}"));
     }

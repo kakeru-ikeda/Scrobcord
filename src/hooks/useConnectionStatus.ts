@@ -2,7 +2,6 @@ import { useEffect } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { useAppStore } from "../store/appStore";
 import {
-  discordConnect,
   discordGetStatus,
   getPollingStatus,
   lastfmGetAuthStatus,
@@ -23,10 +22,10 @@ export function useConnectionStatus() {
       } catch {
       }
 
-      try {
-        await discordConnect();
-      } catch {
-      }
+      // discordConnect() はここで呼ばない。
+      // ポーラーの update_discord が初回接続を管理する。
+      // フロントエンドから自動接続すると React StrictMode の effect 二重実行などで
+      // 接続が上書きされ、nonce リセットや活動の逆戻りが発生するため。
 
       try {
         const discord = await discordGetStatus();

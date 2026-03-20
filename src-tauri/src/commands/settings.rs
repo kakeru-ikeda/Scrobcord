@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use keyring::Entry;
 use log::warn;
 use tauri::AppHandle;
@@ -99,19 +101,29 @@ pub async fn reset_saved_data(
 
     // 4) 実行中タスクとメモリ状態をリセット
     {
-        let mut inner = state.0.lock().unwrap();
+        let (discord_client, poll_cancel_token) = {
+            let mut inner = state.0.lock().unwrap();
+            (
+                Arc::clone(&inner.discord_client),
+                inner.poll_cancel_token.take(),
+            )
+        };
 
-        if let Some(token) = inner.poll_cancel_token.take() {
+        if let Some(token) = poll_cancel_token {
             token.cancel();
         }
 
-        if inner.discord_client.is_connected() {
-            if let Err(e) = inner.discord_client.clear_activity() {
-                warn!("clear_activity on reset: {e}");
+        {
+            let mut client = discord_client.lock().unwrap();
+            if client.is_connected() {
+                if let Err(e) = client.clear_activity() {
+                    warn!("clear_activity on reset: {e}");
+                }
+                client.disconnect();
             }
-            inner.discord_client.disconnect();
         }
 
+        let mut inner = state.0.lock().unwrap();
         inner.settings = defaults;
         inner.auth_status = AuthStatus {
             authenticated: false,

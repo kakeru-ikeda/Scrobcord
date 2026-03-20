@@ -14,19 +14,22 @@ pub async fn discord_connect(
     let arc = Arc::clone(&state.0);
 
     let result = tokio::task::spawn_blocking(move || {
-        // app_id だけ先に取り出し、重い接続処理中は mutex を保持しない
-        let app_id = {
+        // app_id と discord_client の Arc を短時間で取り出す（I/O 中は AppStateInner の Mutex を保持しない）
+        let (app_id, discord_client) = {
             let inner = arc.lock().unwrap();
-            inner.settings.discord_app_id.clone()
+            (
+                inner.settings.discord_app_id.clone(),
+                Arc::clone(&inner.discord_client),
+            )
         };
 
         let mut new_client = DiscordRpcClient::new(app_id);
         let connect_result = new_client.connect();
 
         if connect_result.is_ok() {
-            let mut inner = arc.lock().unwrap();
-            inner.discord_client.disconnect();
-            inner.discord_client = new_client;
+            let mut client = discord_client.lock().unwrap();
+            client.disconnect();
+            *client = new_client;
         }
 
         connect_result
@@ -56,10 +59,13 @@ pub async fn discord_disconnect(
     app: AppHandle,
     state: tauri::State<'_, AppState>,
 ) -> Result<(), String> {
-    let arc = Arc::clone(&state.0);
+    let discord_client = {
+        let inner = state.0.lock().unwrap();
+        Arc::clone(&inner.discord_client)
+    };
 
     tokio::task::spawn_blocking(move || {
-        arc.lock().unwrap().discord_client.disconnect();
+        discord_client.lock().unwrap().disconnect();
     })
     .await
     .map_err(|e| e.to_string())?;
@@ -77,9 +83,14 @@ pub async fn discord_disconnect(
 
 #[tauri::command]
 pub fn discord_get_status(state: tauri::State<'_, AppState>) -> DiscordStatus {
-    let inner = state.0.lock().unwrap();
-    DiscordStatus {
-        connected: inner.discord_client.is_connected(),
-        error: inner.discord_status.error.clone(),
-    }
+    // AppStateInner の Mutex と discord_client の Mutex を同時保持しないよう分けて取得する
+    let (discord_client, error) = {
+        let inner = state.0.lock().unwrap();
+        (
+            Arc::clone(&inner.discord_client),
+            inner.discord_status.error.clone(),
+        )
+    };
+    let connected = discord_client.lock().unwrap().is_connected();
+    DiscordStatus { connected, error }
 }

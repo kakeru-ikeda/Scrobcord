@@ -14,7 +14,10 @@ pub struct AppStateInner {
     pub discord_status: DiscordStatus,
     pub now_playing: Option<Track>,
     pub poll_cancel_token: Option<CancellationToken>,
-    pub discord_client: DiscordRpcClient,
+    /// Discord クライアントは独立した Mutex で管理する。
+    /// AppStateInner の Mutex を保持したままブロッキング I/O を行うと
+    /// tokio ワーカースレッドが詰まって UI が「応答なし」になるため。
+    pub discord_client: Arc<Mutex<DiscordRpcClient>>,
     /// Last.fm OAuth の一時トークン（getToken → getSession 間のみ保持）
     #[allow(dead_code)]
     pub pending_auth_token: Option<String>,

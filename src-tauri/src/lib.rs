@@ -13,10 +13,14 @@ use tauri::Manager;
 /// Discord アクティビティをクリアして切断する（終了処理の共通実装）
 fn discord_cleanup(app: &tauri::AppHandle) {
     let state = app.state::<AppState>();
-    let mut inner = state.0.lock().unwrap();
-    if inner.discord_client.is_connected() {
-        let _ = inner.discord_client.clear_activity();
-        inner.discord_client.disconnect();
+    let discord_client = {
+        let inner = state.0.lock().unwrap();
+        Arc::clone(&inner.discord_client)
+    };
+    let mut client = discord_client.lock().unwrap();
+    if client.is_connected() {
+        let _ = client.clear_activity();
+        client.disconnect();
     }
 }
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -33,7 +37,7 @@ pub fn run() {
         },
         now_playing: None,
         poll_cancel_token: None,
-        discord_client: DiscordRpcClient::new(String::new()),
+        discord_client: Arc::new(Mutex::new(DiscordRpcClient::new(String::new()))),
         pending_auth_token: None,
     })));
 
