@@ -76,12 +76,12 @@
 
 ## Phase 5 — 設定保存・読み込み (tauri-plugin-store)
 
-- [ ] `commands/settings.rs` に Tauri コマンドを実装
-  - [ ] `get_settings()` — Store から読み込み（存在しなければデフォルト値）
-  - [ ] `save_settings(settings)` — Store へ書き込み + `api_secret` は keyring へ移動（Store には保存しない）
-- [ ] アプリ起動時に Store から設定を読み込み `AppState` に反映
-- [ ] デフォルト値: `poll_interval_secs=15`, `discord_enabled=true`, `rpc_show_album_art=true`, `rpc_show_timestamp=true`, `rpc_show_lastfm_button=true`, `language="ja"`
-- [ ] `Settings` の JSON シリアライズ・デシリアライズのテスト作成
+- [x] `commands/settings.rs` に Tauri コマンドを実装
+  - [x] `get_settings()` — Store から読み込み（存在しなければデフォルト値）
+  - [x] `save_settings(settings)` — Store へ書き込み + `api_secret` は keyring へ移動（Store には保存しない）
+- [x] アプリ起動時に Store から設定を読み込み `AppState` に反映
+- [x] デフォルト値: `poll_interval_secs=15`, `discord_enabled=true`, `rpc_show_album_art=true`, `rpc_show_timestamp=true`, `rpc_show_lastfm_button=true`, `language="ja"`
+- [x] `Settings` の JSON シリアライズ・デシリアライズのテスト作成
 
 ---
 

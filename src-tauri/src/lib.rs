@@ -8,6 +8,7 @@ use models::status::{AuthStatus, DiscordStatus};
 use services::discord_rpc::DiscordRpcClient;
 use state::{AppState, AppStateInner};
 use std::sync::{Arc, Mutex};
+use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -40,6 +41,13 @@ pub fn run() {
                 .build(),
         )
         .manage(app_state)
+        .setup(|app| {
+            // ストアから設定を読み込み AppState に反映
+            let loaded = commands::settings::load_settings_from_store(app.handle());
+            let state = app.state::<AppState>();
+            state.0.lock().unwrap().settings = loaded;
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             commands::auth::lastfm_get_auth_token,
             commands::auth::lastfm_get_session,
