@@ -26,6 +26,8 @@ pub fn start(app: AppHandle, state: Arc<Mutex<AppStateInner>>) -> CancellationTo
         // Last.fm が曲切り替えタイミングで一瞬 null を返すことがある。
         // 2回連続 null を確認してから初めてアクティビティをクリアする。
         let mut no_track_ticks: u32 = 0;
+        // reqwest::Client はコネクションプールを持つため使い回す
+        let lastfm_client = LastfmClient::new();
 
         loop {
             tokio::select! {
@@ -33,7 +35,7 @@ pub fn start(app: AppHandle, state: Arc<Mutex<AppStateInner>>) -> CancellationTo
                     info!("polling: cancelled");
                     break;
                 }
-                _ = poll_once(&app, &state, &mut prev_track, &mut no_track_ticks) => {}
+                _ = poll_once(&app, &state, &lastfm_client, &mut prev_track, &mut no_track_ticks) => {}
             }
 
             let interval = { state.lock().unwrap().settings.poll_interval_secs };
@@ -79,6 +81,7 @@ const CLEAR_THRESHOLD: u32 = 2;
 async fn poll_once(
     app: &AppHandle,
     state: &Arc<Mutex<AppStateInner>>,
+    client: &LastfmClient,
     prev_track: &mut Option<Track>,
     no_track_ticks: &mut u32,
 ) {
@@ -108,7 +111,6 @@ async fn poll_once(
         return;
     }
 
-    let client = LastfmClient::new();
     let now_playing = match client.get_now_playing(&username).await {
         Ok(t) => t,
         Err(e) => {
