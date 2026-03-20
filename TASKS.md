@@ -87,18 +87,18 @@
 
 ## Phase 6 — React ダッシュボード UI
 
-- [ ] Tailwind CSS + shadcn/ui のセットアップ
-- [ ] Zustand `appStore.ts` に state（`nowPlaying`, `discordStatus`, `lastfmStatus`, `pollingStatus`）を定義
-- [ ] `lib/tauriInvoke.ts` に型安全な invoke ラッパー関数を定義
-- [ ] `useNowPlaying.ts` hook
-  - [ ] 起動時に `get_now_playing` invoke
-  - [ ] `track-changed` イベントをリッスンして store 更新
-- [ ] `useConnectionStatus.ts` hook
-  - [ ] `discord-status-changed` / `lastfm-status-changed` / `polling-status-changed` イベントをリッスン
-- [ ] `NowPlayingCard.tsx` — アルバムアート / 曲名 / アーティスト / アルバム表示
-- [ ] `ConnectionStatus.tsx` — Last.fm / Discord 接続状態インジケーター
-- [ ] `Dashboard.tsx` — NowPlayingCard + ConnectionStatus + 停止/設定ボタン
-- [ ] 未認証・未接続状態の空状態 UI
+- [x] Tailwind CSS + shadcn/ui のセットアップ
+- [x] Zustand `appStore.ts` に state（`nowPlaying`, `discordStatus`, `lastfmStatus`, `pollingStatus`）を定義
+- [x] `lib/tauriInvoke.ts` に型安全な invoke ラッパー関数を定義
+- [x] `useNowPlaying.ts` hook
+  - [x] 起動時に `get_now_playing` invoke
+  - [x] `track-changed` イベントをリッスンして store 更新
+- [x] `useConnectionStatus.ts` hook
+  - [x] `discord-status-changed` / `lastfm-status-changed` / `polling-status-changed` イベントをリッスン
+- [x] `NowPlayingCard.tsx` — アルバムアート / 曲名 / アーティスト / アルバム表示
+- [x] `ConnectionStatus.tsx` — Last.fm / Discord 接続状態インジケーター
+- [x] `Dashboard.tsx` — NowPlayingCard + ConnectionStatus + 停止/設定ボタン
+- [x] 未認証・未接続状態の空状態 UI
 
 ---
 
