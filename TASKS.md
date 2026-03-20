@@ -104,23 +104,23 @@
 
 ## Phase 7 — React 設定 UI + フォーマットプレビュー
 
-- [ ] タブ付き `Settings.tsx` レイアウト（Last.fm / Discord RPC / 一般）
-- [ ] `LastfmSettings.tsx`
-  - [ ] API Key / API Secret 入力欄（Secret は masked）
-  - [ ] `[Last.fm でログイン]` ボタン → `lastfm_get_auth_token` invoke + ブラウザ起動
-  - [ ] `[承認完了]` ボタン → `lastfm_get_session` invoke
-  - [ ] ユーザー名表示・ログアウトボタン
-- [ ] `DiscordSettings.tsx`
-  - [ ] Application ID 入力欄
-  - [ ] Details / State フォーマット入力欄（`{track}` `{artist}` `{album}` プレースホルダー説明付き）
-  - [ ] アルバムアート / タイムスタンプ / Last.fm ボタン toggle
-  - [ ] フォーマットプレビュー（現在のトラック情報で即時レンダリング）
-- [ ] `GeneralSettings.tsx`
-  - [ ] ポーリング間隔スライダー（5〜60s、ラベル付き）
-  - [ ] ログイン時起動 toggle
-  - [ ] トレイ最小化 toggle
-  - [ ] 言語選択（ja / en）
-- [ ] 設定変更を `save_settings` で即時保存（デバウンス付き）
+- [x] タブ付き `Settings.tsx` レイアウト（Last.fm / Discord RPC / 一般）
+- [x] `LastfmSettings.tsx`
+  - [x] API Key / API Secret 入力欄（Secret は masked）
+  - [x] `[Last.fm でログイン]` ボタン → `lastfm_get_auth_token` invoke + ブラウザ起動
+  - [x] `[承認完了]` ボタン → `lastfm_get_session` invoke
+  - [x] ユーザー名表示・ログアウトボタン
+- [x] `DiscordSettings.tsx`
+  - [x] Application ID 入力欄
+  - [x] Details / State フォーマット入力欄（`{track}` `{artist}` `{album}` プレースホルダー説明付き）
+  - [x] アルバムアート / タイムスタンプ / Last.fm ボタン toggle
+  - [x] フォーマットプレビュー（現在のトラック情報で即時レンダリング）
+- [x] `GeneralSettings.tsx`
+  - [x] ポーリング間隔スライダー（5〜60s、ラベル付き）
+  - [x] ログイン時起動 toggle
+  - [x] トレイ最小化 toggle
+  - [x] 言語選択（ja / en）
+- [x] 設定変更を `save_settings` で即時保存（デバウンス付き）
 
 ---
 
