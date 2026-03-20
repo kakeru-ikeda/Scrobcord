@@ -1,4 +1,5 @@
 // Phase 7 で実装
+import { ExternalLink } from "lucide-react";
 import { Switch } from "../ui/switch";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
@@ -81,6 +82,13 @@ export default function DiscordSettings({ settings, onChange }: Props) {
             )}
           </div>
         </div>
+        <div className="mt-2">
+          <span className="inline-flex items-center gap-1 rounded bg-white/10 px-2 py-0.5 text-[11px] text-white/70">
+            <ExternalLink className="h-2.5 w-2.5" />
+            Last.fmで開く
+          </span>
+        </div>
+        <p className="mt-1 text-[10px] text-white/30">※ Discord ではボタンは自分には表示されません</p>
       </div>
 
       <p className="text-xs text-muted-foreground">
@@ -144,21 +152,6 @@ export default function DiscordSettings({ settings, onChange }: Props) {
           label="アルバムアート表示"
           checked={settings.rpc_show_album_art}
           onCheckedChange={(v) => onChange({ rpc_show_album_art: v })}
-        />
-        <SwitchRow
-          label="タイムスタンプ表示"
-          checked={settings.rpc_show_timestamp}
-          onCheckedChange={(v) => onChange({ rpc_show_timestamp: v })}
-        />
-        <SwitchRow
-          label="Last.fm ボタン表示"
-          checked={settings.rpc_show_lastfm_button}
-          onCheckedChange={(v) => onChange({ rpc_show_lastfm_button: v })}
-        />
-        <SwitchRow
-          label="Discord RPC 有効"
-          checked={settings.discord_enabled}
-          onCheckedChange={(v) => onChange({ discord_enabled: v })}
         />
       </div>
     </div>

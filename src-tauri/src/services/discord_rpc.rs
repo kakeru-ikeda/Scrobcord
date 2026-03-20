@@ -304,17 +304,10 @@ impl DiscordRpcClient {
             }
         }
 
-        if settings.rpc_show_timestamp {
-            let mut timestamps = serde_json::Map::new();
-            let now = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_secs();
-            timestamps.insert("start".to_string(), now.into());
-            activity.insert("timestamps".to_string(), timestamps.into());
-        }
+        // タイムスタンプは表示しない
 
-        if settings.rpc_show_lastfm_button {
+        // Last.fm ボタンは常に表示
+        {
             if let Some(ref url) = track.url {
                 if !url.is_empty() {
                     // Last.fmへのリンク(URLエンコードにより長くなりがち)

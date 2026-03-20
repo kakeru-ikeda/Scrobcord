@@ -69,6 +69,20 @@ pub async fn save_settings(
     );
     store.save().map_err(|e| format!("store save: {e}"))?;
 
+    // Discord RPC の表示設定が変わっても次のポーリングまで待たず即時反映する
+    {
+        let state_arc = Arc::clone(&state.0);
+        let app_handle = app.clone();
+        let settings_clone = settings.clone();
+        tauri::async_runtime::spawn(async move {
+            tokio::task::spawn_blocking(move || {
+                crate::services::poller::refresh_discord(&app_handle, &state_arc, &settings_clone);
+            })
+            .await
+            .unwrap_or_else(|e| warn!("refresh_discord on settings save: {e:?}"));
+        });
+    }
+
     Ok(())
 }
 
@@ -176,10 +190,7 @@ mod tests {
     fn settings_default_values() {
         let s = Settings::default();
         assert_eq!(s.poll_interval_secs, 15);
-        assert!(s.discord_enabled);
         assert!(s.rpc_show_album_art);
-        assert!(s.rpc_show_timestamp);
-        assert!(s.rpc_show_lastfm_button);
         assert_eq!(s.language, "ja");
     }
 
@@ -188,14 +199,11 @@ mod tests {
         let original = Settings {
             lastfm_username: "user123".to_string(),
             discord_app_id: "123456789".to_string(),
-            discord_enabled: false,
             rpc_details_format: "{track}".to_string(),
             rpc_state_format: "{artist}".to_string(),
             rpc_name_format: "{track}".to_string(),
             rpc_use_listening_type: true,
             rpc_show_album_art: false,
-            rpc_show_timestamp: false,
-            rpc_show_lastfm_button: true,
             poll_interval_secs: 30,
             start_on_login: true,
             minimize_to_tray: true,
@@ -204,7 +212,6 @@ mod tests {
         let json = serde_json::to_string(&original).unwrap();
         let restored: Settings = serde_json::from_str(&json).unwrap();
         assert_eq!(restored.poll_interval_secs, original.poll_interval_secs);
-        assert_eq!(restored.discord_enabled, original.discord_enabled);
         assert_eq!(restored.language, original.language);
     }
 }

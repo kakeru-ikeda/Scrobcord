@@ -26,14 +26,11 @@ export interface DiscordStatus {
 export interface Settings {
   lastfm_username: string;
   discord_app_id: string;
-  discord_enabled: boolean;
   rpc_details_format: string;
   rpc_state_format: string;
   rpc_name_format: string;
   rpc_use_listening_type: boolean;
   rpc_show_album_art: boolean;
-  rpc_show_timestamp: boolean;
-  rpc_show_lastfm_button: boolean;
   poll_interval_secs: number;
   start_on_login: boolean;
   minimize_to_tray: boolean;

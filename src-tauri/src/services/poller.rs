@@ -91,13 +91,12 @@ async fn poll_once(
     prev_track: &mut Option<Track>,
     no_track_ticks: &mut u32,
 ) {
-    let (configured_username, auth_username, authenticated, discord_enabled) = {
+    let (configured_username, auth_username, authenticated) = {
         let inner = state.lock().unwrap_or_else(|e| e.into_inner());
         (
             inner.settings.lastfm_username.clone(),
             inner.auth_status.username.clone(),
             inner.auth_status.authenticated,
-            inner.settings.discord_enabled,
         )
     };
 
@@ -108,8 +107,8 @@ async fn poll_once(
     };
 
     debug!(
-        "polling: tick username='{}' authenticated={} discord_enabled={}",
-        username, authenticated, discord_enabled
+        "polling: tick username='{}' authenticated={}",
+        username, authenticated
     );
 
     if username.is_empty() {
@@ -164,29 +163,27 @@ async fn poll_once(
     }
 
     // Discord RPC 更新
-    if discord_enabled {
-        let settings = {
-            state
-                .lock()
-                .unwrap_or_else(|e| e.into_inner())
-                .settings
-                .clone()
-        };
-        let state2 = Arc::clone(state);
-        let app2 = app.clone();
-        let track_owned = now_playing.clone();
-        tokio::task::spawn_blocking(move || {
-            update_discord(
-                &app2,
-                &state2,
-                &settings,
-                track_owned.as_ref(),
-                track_changed,
-            );
-        })
-        .await
-        .unwrap_or_else(|e| warn!("update_discord spawn_blocking failed: {:?}", e));
-    }
+    let settings = {
+        state
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .settings
+            .clone()
+    };
+    let state2 = Arc::clone(state);
+    let app2 = app.clone();
+    let track_owned = now_playing.clone();
+    tokio::task::spawn_blocking(move || {
+        update_discord(
+            &app2,
+            &state2,
+            &settings,
+            track_owned.as_ref(),
+            track_changed,
+        );
+    })
+    .await
+    .unwrap_or_else(|e| warn!("update_discord spawn_blocking failed: {:?}", e));
 }
 
 /// Discord RPC の状態を更新する
@@ -278,4 +275,17 @@ fn is_same_track(a: Option<&Track>, b: Option<&Track>) -> bool {
         (Some(a), Some(b)) => a.title == b.title && a.artist == b.artist,
         _ => false,
     }
+}
+
+/// 設定変更後など、トラック変化を待たずに Discord アクティビティをすぐ更新したいときに呼ぶ。
+/// AppStateInner から最新のトラックを取得して `update_discord` を強制実行する。
+pub fn refresh_discord(app: &AppHandle, state: &Arc<Mutex<AppStateInner>>, settings: &Settings) {
+    let now_playing = {
+        state
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .now_playing
+            .clone()
+    };
+    update_discord(app, state, settings, now_playing.as_ref(), true);
 }

@@ -26,6 +26,8 @@ export default function Settings({ onBack }: SettingsProps) {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // アンマウント時フラッシュ用に最新の settings を ref で保持
+  const latestSettingsRef = useRef<Settings | null>(null);
 
   // 初回読み込み
   useEffect(() => {
@@ -38,6 +40,7 @@ export default function Settings({ onBack }: SettingsProps) {
     if (!settings) return;
     const next = { ...settings, ...patch };
     setSettings(next);
+    latestSettingsRef.current = next;
 
     // デバウンス保存
     if (debounceTimer.current) clearTimeout(debounceTimer.current);
@@ -71,10 +74,16 @@ export default function Settings({ onBack }: SettingsProps) {
     }
   };
 
-  // アンマウント時に残タイマーをフラッシュ
+  // アンマウント時に残タイマーをフラッシュ（保存漏れ防止）
   useEffect(() => {
     return () => {
-      if (debounceTimer.current) clearTimeout(debounceTimer.current);
+      if (debounceTimer.current) {
+        clearTimeout(debounceTimer.current);
+        debounceTimer.current = null;
+        if (latestSettingsRef.current) {
+          saveSettings(latestSettingsRef.current).catch(console.error);
+        }
+      }
     };
   }, []);
 
