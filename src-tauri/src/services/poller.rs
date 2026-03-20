@@ -1,8 +1,151 @@
-// Phase 4 で実装
-pub struct PollerService;
+use std::sync::{Arc, Mutex};
 
-impl PollerService {
-    pub fn new() -> Self {
-        Self
+use log::{error, info, warn};
+use tauri::{AppHandle, Emitter};
+use tokio::time::{sleep, Duration};
+use tokio_util::sync::CancellationToken;
+
+use crate::models::{settings::Settings, track::Track};
+use crate::services::lastfm::LastfmClient;
+use crate::state::AppStateInner;
+
+/// ポーリングタスクを tokio::spawn で起動し CancellationToken を返す
+pub fn start(app: AppHandle, state: Arc<Mutex<AppStateInner>>) -> CancellationToken {
+    let token = CancellationToken::new();
+    let child = token.clone();
+
+    tokio::spawn(async move {
+        info!("polling: started");
+        app.emit(
+            "polling-status-changed",
+            serde_json::json!({ "running": true }),
+        )
+        .unwrap_or_else(|e| warn!("emit polling-status-changed: {e}"));
+
+        let mut prev_track: Option<Track> = None;
+
+        loop {
+            tokio::select! {
+                _ = child.cancelled() => {
+                    info!("polling: cancelled");
+                    break;
+                }
+                _ = poll_once(&app, &state, &mut prev_track) => {}
+            }
+
+            let interval = { state.lock().unwrap().settings.poll_interval_secs };
+
+            tokio::select! {
+                _ = child.cancelled() => {
+                    info!("polling: cancelled (sleep)");
+                    break;
+                }
+                _ = sleep(Duration::from_secs(interval)) => {}
+            }
+        }
+
+        // 停止時に Rich Presence をクリア
+        {
+            let mut inner = state.lock().unwrap();
+            if inner.discord_client.is_connected() {
+                if let Err(e) = inner.discord_client.clear_activity() {
+                    warn!("clear_activity on stop: {e}");
+                }
+            }
+        }
+
+        app.emit(
+            "polling-status-changed",
+            serde_json::json!({ "running": false }),
+        )
+        .unwrap_or_else(|e| warn!("emit polling-status-changed: {e}"));
+        info!("polling: stopped");
+    });
+
+    token
+}
+
+/// 1回のポーリング処理
+async fn poll_once(
+    app: &AppHandle,
+    state: &Arc<Mutex<AppStateInner>>,
+    prev_track: &mut Option<Track>,
+) {
+    let (api_key, api_secret, username, discord_enabled) = {
+        let inner = state.lock().unwrap();
+        (
+            inner.settings.lastfm_api_key.clone(),
+            crate::commands::auth::load_api_secret().unwrap_or_default(),
+            inner.settings.lastfm_username.clone(),
+            inner.settings.discord_enabled,
+        )
+    };
+
+    if api_key.is_empty() || username.is_empty() {
+        return;
+    }
+
+    let client = LastfmClient::new(api_key, api_secret);
+    let now_playing = match client.get_now_playing(&username).await {
+        Ok(t) => t,
+        Err(e) => {
+            error!("polling last.fm: {e}");
+            return;
+        }
+    };
+
+    // 前回と同じなら何もしない
+    if is_same_track(prev_track.as_ref(), now_playing.as_ref()) {
+        return;
+    }
+
+    // 状態更新
+    {
+        let mut inner = state.lock().unwrap();
+        inner.now_playing = now_playing.clone();
+    }
+
+    // track-changed イベントを emit
+    app.emit("track-changed", serde_json::json!({ "track": now_playing }))
+        .unwrap_or_else(|e| warn!("emit track-changed: {e}"));
+
+    // Discord RPC 更新
+    if discord_enabled {
+        let settings = { state.lock().unwrap().settings.clone() };
+        update_discord(state, &settings, now_playing.as_ref());
+    }
+
+    *prev_track = now_playing;
+}
+
+/// Discord RPC の状態を更新する（同期 I/O なので mutex 保持中に実行）
+fn update_discord(state: &Arc<Mutex<AppStateInner>>, settings: &Settings, track: Option<&Track>) {
+    let mut inner = state.lock().unwrap();
+
+    // 未接続なら接続を試みる
+    if !inner.discord_client.is_connected() {
+        inner.discord_client.app_id = settings.discord_app_id.clone();
+        if let Err(e) = inner.discord_client.connect() {
+            warn!("discord connect: {e}");
+            return;
+        }
+    }
+
+    if let Some(t) = track {
+        if let Err(e) = inner.discord_client.set_activity(t, settings) {
+            warn!("set_activity: {e}");
+            // ソケット切断の可能性があるのでリセット
+            inner.discord_client.disconnect();
+        }
+    } else if let Err(e) = inner.discord_client.clear_activity() {
+        warn!("clear_activity: {e}");
+    }
+}
+
+fn is_same_track(a: Option<&Track>, b: Option<&Track>) -> bool {
+    match (a, b) {
+        (None, None) => true,
+        (Some(a), Some(b)) => a.title == b.title && a.artist == b.artist,
+        _ => false,
     }
 }

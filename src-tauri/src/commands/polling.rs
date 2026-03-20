@@ -1,4 +1,5 @@
-// Phase 4 で実装
+use std::sync::Arc;
+
 use tauri::AppHandle;
 
 use crate::models::track::Track;
@@ -6,17 +7,31 @@ use crate::state::AppState;
 
 #[tauri::command]
 pub async fn start_polling(
-    _app: AppHandle,
-    _state: tauri::State<'_, AppState>,
+    app: AppHandle,
+    state: tauri::State<'_, AppState>,
 ) -> Result<(), String> {
-    Err("Not implemented: Phase 4".to_string())
+    let arc = Arc::clone(&state.0);
+    {
+        let mut inner = arc.lock().unwrap();
+        // 既に動いていれば停止してから再起動
+        if let Some(token) = inner.poll_cancel_token.take() {
+            token.cancel();
+        }
+    }
+
+    let arc2 = Arc::clone(&state.0);
+    let token = crate::services::poller::start(app, arc2);
+    state.0.lock().unwrap().poll_cancel_token = Some(token);
+
+    Ok(())
 }
 
 #[tauri::command]
-pub async fn stop_polling(
-    _state: tauri::State<'_, AppState>,
-) -> Result<(), String> {
-    Err("Not implemented: Phase 4".to_string())
+pub async fn stop_polling(state: tauri::State<'_, AppState>) -> Result<(), String> {
+    if let Some(token) = state.0.lock().unwrap().poll_cancel_token.take() {
+        token.cancel();
+    }
+    Ok(())
 }
 
 #[tauri::command]

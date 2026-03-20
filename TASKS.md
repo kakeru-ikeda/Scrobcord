@@ -59,18 +59,18 @@
 
 ## Phase 4 — ポーリングループ (tokio task)
 
-- [ ] `services/poller.rs` に `PollerService` を実装
-  - [ ] `tokio::spawn` でループタスクを起動
-  - [ ] `poll_interval_secs` 間隔で Last.fm `get_now_playing` を呼び出す
-  - [ ] 前回トラックと比較し変化があれば `discord_rpc.set_activity()` 呼び出し
-  - [ ] 再生停止（`nowplaying` フラグなし）時に `clear_activity()` 呼び出し
-  - [ ] `CancellationToken` または `oneshot` チャネルで停止できるようにする
-- [ ] `commands/polling.rs` に Tauri コマンドを実装
-  - [ ] `start_polling(app_handle)`
-  - [ ] `stop_polling()`
-- [ ] トラック変化時に `track-changed` イベントを emit
-- [ ] ポーリング状態変化時に `polling-status-changed` イベントを emit
-- [ ] Last.fm API エラー（レート制限・ネットワーク断）をログ出力しループ継続
+- [x] `services/poller.rs` に `PollerService` を実装
+  - [x] `tokio::spawn` でループタスクを起動
+  - [x] `poll_interval_secs` 間隔で Last.fm `get_now_playing` を呼び出す
+  - [x] 前回トラックと比較し変化があれば `discord_rpc.set_activity()` 呼び出し
+  - [x] 再生停止（`nowplaying` フラグなし）時に `clear_activity()` 呼び出し
+  - [x] `CancellationToken` で停止できるようにする
+- [x] `commands/polling.rs` に Tauri コマンドを実装
+  - [x] `start_polling(app_handle)`
+  - [x] `stop_polling()`
+- [x] トラック変化時に `track-changed` イベントを emit
+- [x] ポーリング状態変化時に `polling-status-changed` イベントを emit
+- [x] Last.fm API エラー（レート制限・ネットワーク断）をログ出力しループ継続
 
 ---
 
