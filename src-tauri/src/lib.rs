@@ -5,6 +5,7 @@ mod state;
 
 use models::settings::Settings;
 use models::status::{AuthStatus, DiscordStatus};
+use services::discord_rpc::DiscordRpcClient;
 use state::{AppState, AppStateInner};
 use std::sync::{Arc, Mutex};
 
@@ -22,11 +23,13 @@ pub fn run() {
         },
         now_playing: None,
         poll_cancel_token: None,
+        discord_client: DiscordRpcClient::new(String::new()),
     })));
 
     tauri::Builder::default()
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             Some(vec![]),

@@ -6,6 +6,7 @@ use crate::models::{
     status::{AuthStatus, DiscordStatus},
     track::Track,
 };
+use crate::services::discord_rpc::DiscordRpcClient;
 
 pub struct AppStateInner {
     pub settings: Settings,
@@ -13,6 +14,7 @@ pub struct AppStateInner {
     pub discord_status: DiscordStatus,
     pub now_playing: Option<Track>,
     pub poll_cancel_token: Option<CancellationToken>,
+    pub discord_client: DiscordRpcClient,
 }
 
 pub struct AppState(pub Arc<Mutex<AppStateInner>>);

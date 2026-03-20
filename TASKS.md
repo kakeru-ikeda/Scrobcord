@@ -19,41 +19,41 @@
 
 ## Phase 2 — Last.fm API クライアント + 認証フロー
 
-- [ ] `models/track.rs` に `Track` 構造体を定義（artist / title / album / album_art_url / url / timestamp）
-- [ ] `models/settings.rs` に `Settings` 構造体を DESIGN.md の仕様どおり定義
-- [ ] `services/lastfm.rs` に `LastfmClient` を実装
-  - [ ] `get_token()` — `auth.getToken` API 呼び出し + MD5 署名生成
-  - [ ] `get_session(token)` — `auth.getSession` API 呼び出し + session_key 取得
-  - [ ] `get_now_playing(username)` — `user.getrecenttracks` (limit=1) 呼び出し・再生中トラック抽出
+- [x] `models/track.rs` に `Track` 構造体を定義（artist / title / album / album_art_url / url / timestamp）
+- [x] `models/settings.rs` に `Settings` 構造体を DESIGN.md の仕様どおり定義
+- [x] `services/lastfm.rs` に `LastfmClient` を実装
+  - [x] `get_token()` — `auth.getToken` API 呼び出し + MD5 署名生成
+  - [x] `get_session(token)` — `auth.getSession` API 呼び出し + session_key 取得
+  - [x] `get_now_playing(username)` — `user.getrecenttracks` (limit=1) 呼び出し・再生中トラック抽出
   - [ ] `get_track_info(artist, track)` — `track.getInfo` からアルバムアート URL 取得（オプション）
-- [ ] `commands/auth.rs` に Tauri コマンドを実装
-  - [ ] `lastfm_get_auth_token()` — トークン取得 + ブラウザで認証 URL を開く
-  - [ ] `lastfm_get_session(token)` — session_key 取得 + keyring 保存
-  - [ ] `lastfm_logout()` — keyring から session_key 削除・状態リセット
-  - [ ] `lastfm_get_auth_status()` — keyring に session_key があるか確認・ユーザー名返却
-- [ ] `api_secret` を keyring に保存する処理を `save_settings` フローに組み込む
-- [ ] 認証成功時に `lastfm-status-changed` イベントを emit
-- [ ] MD5 署名ロジックの単体テスト作成
+- [x] `commands/auth.rs` に Tauri コマンドを実装
+  - [x] `lastfm_get_auth_token()` — トークン取得 + ブラウザで認証 URL を開く
+  - [x] `lastfm_get_session(token)` — session_key 取得 + keyring 保存
+  - [x] `lastfm_logout()` — keyring から session_key 削除・状態リセット
+  - [x] `lastfm_get_auth_status()` — keyring に session_key があるか確認・ユーザー名返却
+- [x] `api_secret` を keyring に保存する処理を `save_settings` フローに組み込む
+- [x] 認証成功時に `lastfm-status-changed` イベントを emit
+- [x] MD5 署名ロジックの単体テスト作成
 
 ---
 
 ## Phase 3 — Discord RPC IPC クライアント
 
-- [ ] `discord-rich-presence` crate または IPC 直接実装を選定・追加
-  - [ ] Windows: Named Pipe `\\.\pipe\discord-ipc-{0..9}` 接続試行ループ
-  - [ ] Mac/Linux: Unix Socket `$TMPDIR/discord-ipc-{0..9}` 接続試行ループ
-- [ ] `services/discord_rpc.rs` に `DiscordRpcClient` を実装
-  - [ ] `connect(app_id)` — handshake フレーム送信
-  - [ ] `set_activity(track)` — SET_ACTIVITY payload 組み立て（details / state / assets / timestamps / buttons）
-  - [ ] `clear_activity()` — アクティビティクリア
-  - [ ] `disconnect()` — ソケットクローズ
-- [ ] `models/status.rs` に `DiscordStatus` / `AuthStatus` を定義
-- [ ] `commands/discord.rs` に Tauri コマンドを実装
-  - [ ] `discord_connect()`
-  - [ ] `discord_disconnect()`
-  - [ ] `discord_get_status()`
-- [ ] 接続状態変化時に `discord-status-changed` イベントを emit
-- [ ] Discord が起動していない場合のエラーハンドリング（再試行なし・即時エラー通知）
+- [x] `discord-rich-presence` crate または IPC 直接実装を選定・追加
+  - [x] Windows: Named Pipe `\\.\pipe\discord-ipc-{0..9}` 接続試行ループ
+  - [x] Mac/Linux: Unix Socket `$TMPDIR/discord-ipc-{0..9}` 接続試行ループ
+- [x] `services/discord_rpc.rs` に `DiscordRpcClient` を実装
+  - [x] `connect(app_id)` — handshake フレーム送信
+  - [x] `set_activity(track)` — SET_ACTIVITY payload 組み立て（details / state / assets / timestamps / buttons）
+  - [x] `clear_activity()` — アクティビティクリア
+  - [x] `disconnect()` — ソケットクローズ
+- [x] `models/status.rs` に `DiscordStatus` / `AuthStatus` を定義
+- [x] `commands/discord.rs` に Tauri コマンドを実装
+  - [x] `discord_connect()`
+  - [x] `discord_disconnect()`
+  - [x] `discord_get_status()`
+- [x] 接続状態変化時に `discord-status-changed` イベントを emit
+- [x] Discord が起動していない場合のエラーハンドリング（再試行なし・即時エラー通知）
 
 ---
 
