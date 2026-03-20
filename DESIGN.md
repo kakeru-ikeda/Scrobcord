@@ -126,23 +126,27 @@ tauri-plugin-log     = "2"
        https://www.last.fm/api/auth/?api_key=XXX&token=TOKEN
         │
         ▼
-[ユーザーがブラウザで承認]
+[Rust] tokio::spawn で認証ポーリング開始（3秒間隔 / 最大5分）
+[イベント] lastfm-auth-polling { polling: true } → UI にスピナー表示
+        │
+        ▼ (ループ)
+[Rust] GET auth.getSession → エラー14(未承認)なら継続 / 成功なら↓
         │
         ▼
-[UI] 「承認しました」ボタン押下
+[ユーザーがブラウザで承認すると次のポーリングで自動検出]
         │
-        ▼
-[Rust] GET auth.getSession (API Key + Token + MD5 署名)
-        │  → session_key 取得
         ▼
 [Rust] session_key を OS キーチェーンに保存 (keyring)
+       username を tauri-plugin-store へ永続化
         │
         ▼
-[イベント] lastfm-auth-success → UI 更新
+[イベント] lastfm-status-changed { authenticated: true, username } → UI 更新
+[イベント] lastfm-auth-polling { polling: false } → スピナー非表示
 ```
 
-- `session_key` は `user.getrecenttracks`（read-only）には不要
-- `api_secret` も OS キーチェーンに保存し平文ファイルには書かない
+- ユーザーはブラウザで承認するだけでよく、アプリへの手動操作は不要
+- タイムアウト時またはキャンセル時は `lastfm-auth-polling { polling: false }` を emit
+- `lastfm_cancel_auth` コマンドでポーリングをキャンセル可能
 
 ---
 
@@ -217,6 +221,7 @@ get_now_playing() -> Option<Track>
 | `discord-status-changed` | `{ connected: bool, error?: string }`        |
 | `lastfm-status-changed`  | `{ authenticated: bool, username?: string }` |
 | `polling-status-changed` | `{ running: bool }`                          |
+| `lastfm-auth-polling`    | `{ polling: bool }`                          |
 
 ---
 

@@ -1,10 +1,11 @@
 // Phase 7 で実装
-import { useState } from "react";
-import { ExternalLink, LogOut, CheckCircle } from "lucide-react";
+import { useState, useEffect } from "react";
+import { ExternalLink, LogOut, CheckCircle, Loader2, X } from "lucide-react";
+import { listen } from "@tauri-apps/api/event";
 import { Button } from "../ui/button";
 import {
   lastfmGetAuthToken,
-  lastfmGetSession,
+  lastfmCancelAuth,
   lastfmGetAuthStatus,
   lastfmLogout,
 } from "../../lib/tauriInvoke";
@@ -20,38 +21,45 @@ export default function LastfmSettings({ settings: _settings, onChange: _onChang
   const lastfmStatus = useAppStore((s) => s.lastfmStatus);
   const setLastfmStatus = useAppStore((s) => s.setLastfmStatus);
 
-  const [pending, setPending] = useState<"token" | "session" | "logout" | null>(null);
+  const [pending, setPending] = useState<"token" | "logout" | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [awaitingCallback, setAwaitingCallback] = useState(false);
+  const [isPolling, setIsPolling] = useState(false);
+
+  // lastfm-auth-polling イベントを購読して自動完了を受け取る
+  useEffect(() => {
+    const unlisten = listen<{ polling: boolean }>("lastfm-auth-polling", (e) => {
+      setIsPolling(e.payload.polling);
+      if (!e.payload.polling) {
+        setPending(null);
+      }
+    });
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+  }, []);
 
   const handleLogin = async () => {
     setError(null);
     setPending("token");
     try {
       await lastfmGetAuthToken();
-      setAwaitingCallback(true);
+      // ポーリング開始は lastfm-auth-polling イベントで通知されるので
+      // ここでは setPending(null) しない（ポーリング終了まで待機表示を継続）
     } catch (e) {
       setError(String(e));
-    } finally {
       setPending(null);
+      setIsPolling(false);
     }
   };
 
-  const handleGetSession = async () => {
-    setError(null);
-    setPending("session");
+  const handleCancelAuth = async () => {
     try {
-      await lastfmGetSession();
-      setAwaitingCallback(false);
-      // イベントを待たずに直接ストアを更新
-
-      const status = await lastfmGetAuthStatus();
-      setLastfmStatus(status);
-    } catch (e) {
-      setError(String(e));
-    } finally {
-      setPending(null);
+      await lastfmCancelAuth();
+    } catch {
+      // ignore
     }
+    setIsPolling(false);
+    setPending(null);
   };
 
   const handleLogout = async () => {
@@ -60,13 +68,23 @@ export default function LastfmSettings({ settings: _settings, onChange: _onChang
     try {
       await lastfmLogout();
       setLastfmStatus({ authenticated: false });
-      setAwaitingCallback(false);
+      setIsPolling(false);
     } catch (e) {
       setError(String(e));
     } finally {
       setPending(null);
     }
   };
+
+  // lastfm-status-changed は useConnectionStatus フックが購読済み。
+  // 認証完了後に最新状態を取得して確実にストアへ反映する。
+  useEffect(() => {
+    if (lastfmStatus.authenticated && isPolling) {
+      setIsPolling(false);
+      setPending(null);
+      lastfmGetAuthStatus().then(setLastfmStatus).catch(() => {});
+    }
+  }, [lastfmStatus.authenticated, isPolling]);
 
   return (
     <div className="flex flex-col gap-4">
@@ -89,25 +107,33 @@ export default function LastfmSettings({ settings: _settings, onChange: _onChang
         </div>
       ) : (
         <div className="flex flex-col gap-2">
-          <Button
-            variant="default"
-            size="sm"
-            onClick={handleLogin}
-            disabled={pending === "token"}
-            className="w-full"
-          >
-            <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
-            Last.fm でログイン
-          </Button>
-          {awaitingCallback && (
+          {isPolling ? (
+            /* ブラウザ承認待ちのポーリング中表示 */
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm text-muted-foreground">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                <span>ブラウザで承認するのを待っています...</span>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleCancelAuth}
+                className="w-full text-muted-foreground"
+              >
+                <X className="mr-1.5 h-3.5 w-3.5" />
+                キャンセル
+              </Button>
+            </div>
+          ) : (
             <Button
-              variant="outline"
+              variant="default"
               size="sm"
-              onClick={handleGetSession}
-              disabled={pending === "session"}
+              onClick={handleLogin}
+              disabled={pending === "token"}
               className="w-full"
             >
-              承認完了（セッション取得）
+              <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
+              Last.fm でログイン
             </Button>
           )}
         </div>
@@ -119,3 +145,4 @@ export default function LastfmSettings({ settings: _settings, onChange: _onChang
     </div>
   );
 }
+

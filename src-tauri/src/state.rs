@@ -19,8 +19,9 @@ pub struct AppStateInner {
     /// tokio ワーカースレッドが詰まって UI が「応答なし」になるため。
     pub discord_client: Arc<Mutex<DiscordRpcClient>>,
     /// Last.fm OAuth の一時トークン（getToken → getSession 間のみ保持）
-    #[allow(dead_code)]
     pub pending_auth_token: Option<String>,
+    /// Last.fm 認証ポーリングタスクのキャンセルトークン
+    pub auth_poll_cancel_token: Option<CancellationToken>,
 }
 
 pub struct AppState(pub Arc<Mutex<AppStateInner>>);

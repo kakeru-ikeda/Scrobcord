@@ -5,8 +5,6 @@ import NowPlayingCard from "../components/NowPlayingCard";
 import ConnectionStatus from "../components/ConnectionStatus";
 import TitleBar from "../components/TitleBar";
 import { Button } from "../components/ui/button";
-import { useNowPlaying } from "../hooks/useNowPlaying";
-import { useConnectionStatus } from "../hooks/useConnectionStatus";
 import { useAppStore } from "../store/appStore";
 import { startPolling, stopPolling } from "../lib/tauriInvoke";
 
@@ -15,9 +13,6 @@ interface DashboardProps {
 }
 
 export default function Dashboard({ onNavigateSettings }: DashboardProps) {
-  useNowPlaying();
-  useConnectionStatus();
-
   const pollingRunning = useAppStore((s) => s.pollingRunning);
   const lastfm = useAppStore((s) => s.lastfmStatus);
 

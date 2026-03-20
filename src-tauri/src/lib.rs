@@ -39,6 +39,7 @@ pub fn run() {
         poll_cancel_token: None,
         discord_client: Arc::new(Mutex::new(DiscordRpcClient::new(String::new()))),
         pending_auth_token: None,
+        auth_poll_cancel_token: None,
     })));
 
     tauri::Builder::default()
@@ -92,6 +93,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::auth::lastfm_get_auth_token,
             commands::auth::lastfm_get_session,
+            commands::auth::lastfm_cancel_auth,
             commands::auth::lastfm_logout,
             commands::auth::lastfm_get_auth_status,
             commands::discord::discord_connect,

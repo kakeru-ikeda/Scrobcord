@@ -47,6 +47,9 @@ export const lastfmGetAuthToken = () =>
 export const lastfmGetSession = () =>
   invoke<void>("lastfm_get_session");
 
+export const lastfmCancelAuth = () =>
+  invoke<void>("lastfm_cancel_auth");
+
 export const lastfmLogout = () =>
   invoke<void>("lastfm_logout");
 
