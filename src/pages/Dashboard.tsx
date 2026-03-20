@@ -3,6 +3,7 @@ import { useCallback } from "react";
 import { Settings, Square, Play } from "lucide-react";
 import NowPlayingCard from "../components/NowPlayingCard";
 import ConnectionStatus from "../components/ConnectionStatus";
+import TitleBar from "../components/TitleBar";
 import { Button } from "../components/ui/button";
 import { useNowPlaying } from "../hooks/useNowPlaying";
 import { useConnectionStatus } from "../hooks/useConnectionStatus";
@@ -36,11 +37,8 @@ export default function Dashboard({ onNavigateSettings }: DashboardProps) {
 
   return (
     <div className="flex h-screen flex-col bg-background">
-      {/* タイトルバー（ドラッグ領域） */}
-      <div
-        className="flex h-9 shrink-0 items-center px-4"
-        data-tauri-drag-region
-      >
+      {/* タイトルバー */}
+      <TitleBar>
         <span className="text-sm font-semibold text-foreground/80">Scrobcord</span>
         {pollingRunning && (
           <span className="ml-2 flex items-center gap-1 text-xs text-green-400">
@@ -48,7 +46,7 @@ export default function Dashboard({ onNavigateSettings }: DashboardProps) {
             Scrobbling
           </span>
         )}
-      </div>
+      </TitleBar>
 
       <div className="mx-3 h-px bg-border" />
 

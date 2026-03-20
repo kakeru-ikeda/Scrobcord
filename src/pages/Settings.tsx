@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import LastfmSettings from "../components/settings/LastfmSettings";
 import DiscordSettings from "../components/settings/DiscordSettings";
 import GeneralSettings from "../components/settings/GeneralSettings";
+import TitleBar from "../components/TitleBar";
 import { cn } from "../lib/utils";
 import { getSettings, resetSavedData, saveSettings } from "../lib/tauriInvoke";
 import type { Settings } from "../lib/tauriInvoke";
@@ -90,23 +91,20 @@ export default function Settings({ onBack }: SettingsProps) {
   return (
     <div className="flex h-screen flex-col bg-background">
       {/* タイトルバー */}
-      <div
-        className="flex h-9 shrink-0 items-center gap-3 px-4"
-        data-tauri-drag-region
-      >
+      <TitleBar>
         <button
           onClick={onBack}
           className="text-xs text-muted-foreground hover:text-foreground transition-colors"
         >
           ← 戻る
         </button>
-        <span className="text-sm font-semibold text-foreground/80">設定</span>
+        <span className="ml-2 text-sm font-semibold text-foreground/80">設定</span>
         {saveError && (
           <span className="ml-auto text-xs text-red-400 truncate max-w-[160px]" title={saveError}>
             保存失敗
           </span>
         )}
-      </div>
+      </TitleBar>
 
       <div className="mx-3 h-px bg-border" />
 

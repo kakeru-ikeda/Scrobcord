@@ -15,7 +15,7 @@
         "title": "Scrobcord",
         "width": 480,
         "height": 640,
-        "resizable": false,
+        "resizable": true,
         "decorations": false
       }
     ],
