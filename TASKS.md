@@ -7,13 +7,13 @@
 
 ## Phase 1 — Tauri プロジェクト初期化・基本構成
 
-- [ ] `npm create tauri-app@latest` で Tauri 2.x + React + TypeScript + Vite テンプレート生成
-- [ ] `src-tauri/Cargo.toml` に DESIGN.md 記載の依存クレートをすべて追加
-- [ ] `tauri-plugin-store`, `tauri-plugin-shell`, `tauri-plugin-autostart`, `tauri-plugin-log` を `lib.rs` に登録
-- [ ] `tauri.conf.json` の `identifier`, `windows` (title / size / decorations), `bundle` を設定
-- [ ] `src-tauri/src/` に `commands/`, `services/`, `models/` ディレクトリと各 `mod.rs` を作成
-- [ ] `state.rs` に `AppState` 構造体（Arc\<Mutex\<...\>>）の骨格を定義
-- [ ] `npm run tauri dev` でウィンドウが起動することを確認
+- [x] `npm create tauri-app@latest` で Tauri 2.x + React + TypeScript + Vite テンプレート生成
+- [x] `src-tauri/Cargo.toml` に DESIGN.md 記載の依存クレートをすべて追加
+- [x] `tauri-plugin-store`, `tauri-plugin-shell`, `tauri-plugin-autostart`, `tauri-plugin-log` を `lib.rs` に登録
+- [x] `tauri.conf.json` の `identifier`, `windows` (title / size / decorations), `bundle` を設定
+- [x] `src-tauri/src/` に `commands/`, `services/`, `models/` ディレクトリと各 `mod.rs` を作成
+- [x] `state.rs` に `AppState` 構造体（Arc\<Mutex\<...\>>）の骨格を定義
+- [x] `npm run tauri dev` でウィンドウが起動することを確認
 
 ---
 

@@ -1,0 +1,32 @@
+[package]
+name = "scrobcord"
+version = "0.1.0"
+description = "Last.fm scrobble → Discord Rich Presence"
+authors = []
+edition = "2021"
+
+[lib]
+# _lib suffix avoids name conflict with the bin on Windows
+# https://github.com/rust-lang/cargo/issues/8519
+name = "scrobcord_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri              = { version = "2", features = ["tray-icon", "image-png"] }
+tauri-plugin-store = "2"
+tauri-plugin-shell = "2"
+tauri-plugin-autostart = "2"
+tauri-plugin-log   = "2"
+tokio              = { version = "1", features = ["full"] }
+tokio-util         = { version = "0.7", features = ["rt"] }
+reqwest            = { version = "0.12", features = ["json"] }
+serde              = { version = "1", features = ["derive"] }
+serde_json         = "1"
+md5                = "0.7"
+keyring            = "2"
+chrono             = { version = "0.4", features = ["serde"] }
+log                = "0.4"
+
