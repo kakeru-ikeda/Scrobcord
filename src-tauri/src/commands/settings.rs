@@ -1,12 +1,20 @@
+use keyring::Entry;
+use log::warn;
 use tauri::AppHandle;
+use tauri::Emitter;
 use tauri_plugin_autostart::ManagerExt as AutostartManagerExt;
 use tauri_plugin_store::StoreExt;
 
-use crate::models::settings::Settings;
+use crate::models::{
+    settings::Settings,
+    status::{AuthStatus, DiscordStatus},
+};
 use crate::state::AppState;
 
 const STORE_PATH: &str = "settings.json";
 const STORE_KEY: &str = "settings";
+const KEYRING_SERVICE: &str = "scrobcord";
+const KEYRING_SESSION_KEY: &str = "lastfm_session_key";
 
 /// Store からアプリ起動時に Settings を読み込む（lib.rs の setup から呼ぶ）
 pub fn load_settings_from_store(app: &AppHandle) -> Settings {
@@ -40,9 +48,13 @@ pub async fn save_settings(
     // autostart と同期
     let autostart = app.autolaunch();
     if start_on_login {
-        autostart.enable().map_err(|e| format!("autostart enable: {e}"))?;
+        if let Err(e) = autostart.enable() {
+            warn!("autostart enable failed (settings save continues): {e}");
+        }
     } else {
-        autostart.disable().map_err(|e| format!("autostart disable: {e}"))?;
+        if let Err(e) = autostart.disable() {
+            warn!("autostart disable failed (settings save continues): {e}");
+        }
     }
 
     // tauri-plugin-store へ永続化
@@ -54,6 +66,92 @@ pub async fn save_settings(
         serde_json::to_value(&settings).map_err(|e| e.to_string())?,
     );
     store.save().map_err(|e| format!("store save: {e}"))?;
+
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn reset_saved_data(
+    app: AppHandle,
+    state: tauri::State<'_, AppState>,
+) -> Result<(), String> {
+    // 1) keyring の Last.fm session を削除
+    if let Ok(entry) = Entry::new(KEYRING_SERVICE, KEYRING_SESSION_KEY) {
+        let _ = entry.delete_password();
+    }
+
+    // 2) autostart は無効化
+    let autostart = app.autolaunch();
+    if let Err(e) = autostart.disable() {
+        warn!("autostart disable failed on reset (continues): {e}");
+    }
+
+    // 3) 設定をデフォルトで永続化
+    let defaults = Settings::default();
+    let store = app
+        .store(STORE_PATH)
+        .map_err(|e| format!("store open: {e}"))?;
+    store.set(
+        STORE_KEY,
+        serde_json::to_value(&defaults).map_err(|e| e.to_string())?,
+    );
+    store.save().map_err(|e| format!("store save: {e}"))?;
+
+    // 4) 実行中タスクとメモリ状態をリセット
+    {
+        let mut inner = state.0.lock().unwrap();
+
+        if let Some(token) = inner.poll_cancel_token.take() {
+            token.cancel();
+        }
+
+        if inner.discord_client.is_connected() {
+            if let Err(e) = inner.discord_client.clear_activity() {
+                warn!("clear_activity on reset: {e}");
+            }
+            inner.discord_client.disconnect();
+        }
+
+        inner.settings = defaults;
+        inner.auth_status = AuthStatus {
+            authenticated: false,
+            username: None,
+        };
+        inner.discord_status = DiscordStatus {
+            connected: false,
+            error: None,
+        };
+        inner.now_playing = None;
+        inner.pending_auth_token = None;
+    }
+
+    // 5) フロントへ状態更新通知
+    app.emit(
+        "lastfm-status-changed",
+        AuthStatus {
+            authenticated: false,
+            username: None,
+        },
+    )
+    .map_err(|e| e.to_string())?;
+
+    app.emit(
+        "discord-status-changed",
+        DiscordStatus {
+            connected: false,
+            error: None,
+        },
+    )
+    .map_err(|e| e.to_string())?;
+
+    app.emit("track-changed", serde_json::json!({ "track": null }))
+        .map_err(|e| e.to_string())?;
+
+    app.emit(
+        "polling-status-changed",
+        serde_json::json!({ "running": false }),
+    )
+    .map_err(|e| e.to_string())?;
 
     Ok(())
 }

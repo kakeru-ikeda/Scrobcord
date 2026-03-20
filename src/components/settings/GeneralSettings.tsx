@@ -2,11 +2,13 @@
 import { Switch } from "../ui/switch";
 import { Slider } from "../ui/slider";
 import { Label } from "../ui/label";
+import { Button } from "../ui/button";
 import type { Settings } from "../../lib/tauriInvoke";
 
 interface Props {
   settings: Settings;
   onChange: (patch: Partial<Settings>) => void;
+  onResetSavedData: () => void;
 }
 
 function SwitchRow({
@@ -26,7 +28,7 @@ function SwitchRow({
   );
 }
 
-export default function GeneralSettings({ settings, onChange }: Props) {
+export default function GeneralSettings({ settings, onChange, onResetSavedData }: Props) {
   return (
     <div className="flex flex-col gap-4">
       {/* ポーリング間隔 */}
@@ -75,6 +77,17 @@ export default function GeneralSettings({ settings, onChange }: Props) {
           <option value="ja">日本語</option>
           <option value="en">English</option>
         </select>
+      </div>
+
+      <div className="pt-2">
+        <Button
+          variant="destructive"
+          size="sm"
+          className="w-full"
+          onClick={onResetSavedData}
+        >
+          保存情報をリセット
+        </Button>
       </div>
     </div>
   );

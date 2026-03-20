@@ -70,8 +70,10 @@ pub fn run() {
             commands::polling::start_polling,
             commands::polling::stop_polling,
             commands::polling::get_now_playing,
+            commands::polling::get_polling_status,
             commands::settings::get_settings,
             commands::settings::save_settings,
+            commands::settings::reset_saved_data,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

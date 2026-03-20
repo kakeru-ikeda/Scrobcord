@@ -4,7 +4,7 @@ import LastfmSettings from "../components/settings/LastfmSettings";
 import DiscordSettings from "../components/settings/DiscordSettings";
 import GeneralSettings from "../components/settings/GeneralSettings";
 import { cn } from "../lib/utils";
-import { getSettings, saveSettings } from "../lib/tauriInvoke";
+import { getSettings, resetSavedData, saveSettings } from "../lib/tauriInvoke";
 import type { Settings } from "../lib/tauriInvoke";
 
 type Tab = "lastfm" | "discord" | "general";
@@ -49,6 +49,26 @@ export default function Settings({ onBack }: SettingsProps) {
         setSaveError(String(e));
       }
     }, DEBOUNCE_MS);
+  };
+
+  const handleResetSavedData = async () => {
+    if (!window.confirm("保存済みの設定とLast.fm認証情報をリセットします。よろしいですか？")) {
+      return;
+    }
+
+    if (debounceTimer.current) {
+      clearTimeout(debounceTimer.current);
+      debounceTimer.current = null;
+    }
+
+    try {
+      await resetSavedData();
+      const fresh = await getSettings();
+      setSettings(fresh);
+      setSaveError(null);
+    } catch (e) {
+      setSaveError(String(e));
+    }
   };
 
   // アンマウント時に残タイマーをフラッシュ
@@ -110,7 +130,11 @@ export default function Settings({ onBack }: SettingsProps) {
         ) : tab === "discord" ? (
           <DiscordSettings settings={settings} onChange={handleChange} />
         ) : (
-          <GeneralSettings settings={settings} onChange={handleChange} />
+          <GeneralSettings
+            settings={settings}
+            onChange={handleChange}
+            onResetSavedData={handleResetSavedData}
+          />
         )}
       </div>
     </div>

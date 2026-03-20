@@ -1,6 +1,6 @@
 use std::sync::{Arc, Mutex};
 
-use log::{error, info, warn};
+use log::{debug, error, info, warn};
 use tauri::{AppHandle, Emitter};
 use tokio::time::{sleep, Duration};
 use tokio_util::sync::CancellationToken;
@@ -71,15 +71,33 @@ async fn poll_once(
     state: &Arc<Mutex<AppStateInner>>,
     prev_track: &mut Option<Track>,
 ) {
-    let (username, discord_enabled) = {
+    let (configured_username, auth_username, authenticated, discord_enabled) = {
         let inner = state.lock().unwrap();
         (
             inner.settings.lastfm_username.clone(),
+            inner.auth_status.username.clone(),
+            inner.auth_status.authenticated,
             inner.settings.discord_enabled,
         )
     };
 
+    let username = if configured_username.is_empty() {
+        auth_username.unwrap_or_default()
+    } else {
+        configured_username
+    };
+
+    debug!(
+        "polling: tick username='{}' authenticated={} discord_enabled={}",
+        username,
+        authenticated,
+        discord_enabled
+    );
+
     if username.is_empty() {
+        warn!(
+            "polling: lastfm username is empty, skip tick (authenticated={authenticated})"
+        );
         return;
     }
 
@@ -91,6 +109,15 @@ async fn poll_once(
             return;
         }
     };
+
+    match now_playing.as_ref() {
+        Some(track) => debug!(
+            "polling: detected now playing '{}' - '{}'",
+            track.artist,
+            track.title
+        ),
+        None => debug!("polling: no now-playing track returned for user '{}'", username),
+    }
 
     // 前回と同じなら何もしない
     if is_same_track(prev_track.as_ref(), now_playing.as_ref()) {

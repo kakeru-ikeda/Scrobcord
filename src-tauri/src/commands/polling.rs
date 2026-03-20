@@ -38,3 +38,8 @@ pub async fn stop_polling(state: tauri::State<'_, AppState>) -> Result<(), Strin
 pub fn get_now_playing(state: tauri::State<'_, AppState>) -> Option<Track> {
     state.0.lock().unwrap().now_playing.clone()
 }
+
+#[tauri::command]
+pub fn get_polling_status(state: tauri::State<'_, AppState>) -> bool {
+    state.0.lock().unwrap().poll_cancel_token.is_some()
+}

@@ -1,5 +1,7 @@
 use std::collections::BTreeMap;
 
+use log::debug;
+
 use crate::models::track::Track;
 
 const API_ROOT: &str = "https://ws.audioscrobbler.com/2.0/";
@@ -18,6 +20,11 @@ pub struct LastfmClient {
     pub api_key: String,
     api_secret: String,
     client: reqwest::Client,
+}
+
+pub struct LastfmSession {
+    pub key: String,
+    pub username: String,
 }
 
 impl LastfmClient {
@@ -76,7 +83,7 @@ impl LastfmClient {
     // -----------------------------------------------------------------------
     // auth.getSession
     // -----------------------------------------------------------------------
-    pub async fn get_session(&self, token: &str) -> Result<String, String> {
+    pub async fn get_session(&self, token: &str) -> Result<LastfmSession, String> {
         let mut params: BTreeMap<&str, String> = BTreeMap::new();
         params.insert("api_key", self.api_key.clone());
         params.insert("method", "auth.getSession".to_string());
@@ -105,16 +112,25 @@ impl LastfmClient {
             return Err(format!("Last.fm error: {err_msg}"));
         }
 
-        resp["session"]["key"]
+        let key = resp["session"]["key"]
             .as_str()
             .map(|s| s.to_string())
-            .ok_or_else(|| format!("session key not found: {resp}"))
+            .ok_or_else(|| format!("session key not found: {resp}"))?;
+
+        let username = resp["session"]["name"]
+            .as_str()
+            .map(|s| s.to_string())
+            .ok_or_else(|| format!("session username not found: {resp}"))?;
+
+        Ok(LastfmSession { key, username })
     }
 
     // -----------------------------------------------------------------------
     // user.getRecentTracks (limit=1) → 現在再生中トラックを返す
     // -----------------------------------------------------------------------
     pub async fn get_now_playing(&self, username: &str) -> Result<Option<Track>, String> {
+        debug!("lastfm: requesting recent tracks for user='{}'", username);
+
         let resp = self
             .client
             .get(API_ROOT)
@@ -139,27 +155,41 @@ impl LastfmClient {
         let tracks = resp["recenttracks"]["track"]
             .as_array()
             .and_then(|arr| arr.first())
-            .or_else(|| resp["recenttracks"]["track"].as_object().map(|_| &resp["recenttracks"]["track"]));
+            .or_else(|| {
+                resp["recenttracks"]["track"]
+                    .as_object()
+                    .map(|_| &resp["recenttracks"]["track"])
+            });
 
         let track_val = match tracks {
             Some(t) => t,
-            None => return Ok(None),
+            None => {
+                debug!(
+                    "lastfm: recenttracks.track not found in response for user='{}'",
+                    username
+                );
+                return Ok(None);
+            }
         };
 
         // nowplaying 属性があるもののみ対象
         let is_nowplaying = track_val["@attr"]["nowplaying"]
             .as_str()
             .map(|s| s == "true")
+            .or_else(|| track_val["@attr"]["nowplaying"].as_bool())
             .unwrap_or(false);
 
+        debug!(
+            "lastfm: nowplaying_attr={:?} parsed_nowplaying={}",
+            track_val["@attr"]["nowplaying"], is_nowplaying
+        );
+
         if !is_nowplaying {
+            debug!("lastfm: latest track is not marked as now playing");
             return Ok(None);
         }
 
-        let title = track_val["name"]
-            .as_str()
-            .unwrap_or_default()
-            .to_string();
+        let title = track_val["name"].as_str().unwrap_or_default().to_string();
         let artist = track_val["artist"]["#text"]
             .as_str()
             .unwrap_or_default()
@@ -185,6 +215,8 @@ impl LastfmClient {
             .as_str()
             .filter(|s| !s.is_empty())
             .map(|s| s.to_string());
+
+        debug!("lastfm: parsed now playing '{}' - '{}'", artist, title);
 
         Ok(Some(Track {
             title,
@@ -219,7 +251,10 @@ mod tests {
         let sig = client.sign(&params);
 
         // python: hashlib.md5(b"api_keyxxxmethodauth.getTokenyyy").hexdigest()
-        assert_eq!(sig, format!("{:x}", md5::compute(b"api_keyxxxmethodauth.getTokenyyy")));
+        assert_eq!(
+            sig,
+            format!("{:x}", md5::compute(b"api_keyxxxmethodauth.getTokenyyy"))
+        );
     }
 
     #[test]
@@ -243,12 +278,20 @@ mod tests {
         // 正しい連結: "api_key" + "mykey" + "method" + "auth.getSession" + "token" + "mytoken" + "mysecret"
         let expected_correct = format!(
             "{:x}",
-            md5::compute("api_keymykeymethod auth.getSessiontokenmytokenmysecret".replace(' ', "").as_bytes())
+            md5::compute(
+                "api_keymykeymethod auth.getSessiontokenmytokenmysecret"
+                    .replace(' ', "")
+                    .as_bytes()
+            )
         );
         let manually = format!(
             "{:x}",
             md5::compute(
-                format!("api_keymykeymethod{}tokenmytokenmysecret", "auth.getSession").as_bytes()
+                format!(
+                    "api_keymykeymethod{}tokenmytokenmysecret",
+                    "auth.getSession"
+                )
+                .as_bytes()
             )
         );
         assert_eq!(sig, manually);

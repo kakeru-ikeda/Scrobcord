@@ -4,6 +4,7 @@ import { useAppStore } from "../store/appStore";
 import {
   discordConnect,
   discordGetStatus,
+  getPollingStatus,
   lastfmGetAuthStatus,
   type AuthStatus,
   type DiscordStatus,
@@ -30,6 +31,12 @@ export function useConnectionStatus() {
       try {
         const discord = await discordGetStatus();
         setDiscordStatus(discord);
+      } catch {
+      }
+
+      try {
+        const running = await getPollingStatus();
+        setPollingRunning(running);
       } catch {
       }
     })();

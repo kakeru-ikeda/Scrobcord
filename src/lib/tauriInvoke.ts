@@ -80,6 +80,9 @@ export const stopPolling = () =>
 export const getNowPlaying = () =>
   invoke<Track | null>("get_now_playing");
 
+export const getPollingStatus = () =>
+  invoke<boolean>("get_polling_status");
+
 // ---------------------------------------------------------------------------
 // Settings
 // ---------------------------------------------------------------------------
@@ -89,3 +92,6 @@ export const getSettings = () =>
 
 export const saveSettings = (settings: Settings) =>
   invoke<void>("save_settings", { settings });
+
+export const resetSavedData = () =>
+  invoke<void>("reset_saved_data");

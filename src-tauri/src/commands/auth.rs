@@ -1,4 +1,5 @@
 use keyring::Entry;
+use log::{info, warn};
 use tauri::{AppHandle, Emitter};
 use tauri_plugin_opener::OpenerExt;
 
@@ -74,43 +75,31 @@ pub async fn lastfm_get_session(
         .ok_or_else(|| "先に [Last.fm でログイン] をクリックしてください".to_string())?;
 
     let client = LastfmClient::new();
-    let session_key = client.get_session(&token).await?;
+    let session = client.get_session(&token).await?;
 
     // 一時トークンをクリア
     state.0.lock().unwrap().pending_auth_token = None;
 
     // keyring に保存（平文ファイルには書かない）
-    store_session_key(&session_key)?;
+    store_session_key(&session.key)?;
 
-    // ユーザー名を取得して状態を更新
-    // user.getRecentTracks で username を確認する代わりに、
-    // 設定の lastfm_username を使う（空なら "unknown" として後でポーリングで確定）
-    let username = { state.0.lock().unwrap().settings.lastfm_username.clone() };
+    let status = crate::models::status::AuthStatus {
+        authenticated: true,
+        username: Some(session.username.clone()),
+    };
 
     {
         let mut inner = state.0.lock().unwrap();
-        inner.auth_status = crate::models::status::AuthStatus {
-            authenticated: true,
-            username: if username.is_empty() {
-                None
-            } else {
-                Some(username.clone())
-            },
-        };
+        inner.settings.lastfm_username = session.username.clone();
+        inner.auth_status = status.clone();
     }
 
-    app.emit(
-        "lastfm-status-changed",
-        crate::models::status::AuthStatus {
-            authenticated: true,
-            username: if username.is_empty() {
-                None
-            } else {
-                Some(username)
-            },
-        },
-    )
-    .map_err(|e| e.to_string())?;
+    // username を永続化し、次回起動時もポーリング可能にする
+    let updated_settings = { state.0.lock().unwrap().settings.clone() };
+    crate::commands::settings::save_settings(app.clone(), updated_settings, state).await?;
+
+    app.emit("lastfm-status-changed", status)
+        .map_err(|e| e.to_string())?;
 
     Ok(())
 }
@@ -150,11 +139,25 @@ pub fn lastfm_get_auth_status(state: tauri::State<'_, AppState>) -> AuthStatus {
     // 起動時に keyring から session_key を確認して状態を同期する
     let has_session = load_session_key().is_some();
     let mut inner = state.0.lock().unwrap();
+
     if has_session && !inner.auth_status.authenticated {
         inner.auth_status.authenticated = true;
+        if inner.auth_status.username.is_none() && !inner.settings.lastfm_username.is_empty() {
+            inner.auth_status.username = Some(inner.settings.lastfm_username.clone());
+        }
     } else if !has_session {
         inner.auth_status.authenticated = false;
         inner.auth_status.username = None;
     }
+
+    info!(
+        "lastfm auth status: authenticated={} username={:?} settings_username='{}'",
+        inner.auth_status.authenticated, inner.auth_status.username, inner.settings.lastfm_username
+    );
+
+    if inner.auth_status.authenticated && inner.settings.lastfm_username.is_empty() {
+        warn!("lastfm username is empty in settings; polling cannot fetch now-playing until username is set (re-login may be required)");
+    }
+
     inner.auth_status.clone()
 }
