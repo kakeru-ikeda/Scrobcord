@@ -370,30 +370,6 @@ impl DiscordRpcClient {
         send_rpc_command(stream, &payload)
     }
 
-    /// PINGフレームを送信してPONGを受信し、接続の生死を確認する
-    pub fn ping(&mut self) -> Result<(), String> {
-        let stream = self
-            .stream
-            .as_mut()
-            .ok_or_else(|| "Discordに接続されていません".to_string())?;
-
-        // PINGにnonceは不要。nonceをインクリメントしないことで
-        // SET_ACTIVITYのnonce体系を汚染しない
-        write_frame(stream, OP_PING, &json!({}))?;
-
-        // PONGを受信して接続確認。途中に積まれたOP_FRAMEも最大16個まで読み飛ばす
-        for _ in 0..16 {
-            let (op, resp) = read_frame(stream)?;
-            match op {
-                OP_PONG => return Ok(()),
-                OP_CLOSE => return Err(format!("Discord が接続を閉じました: {resp}")),
-                _ => {} // 他のフレームは読み飛ばす
-            }
-        }
-
-        Err("Discord PONG を受信できませんでした".to_string())
-    }
-
     /// 接続を切断する
     pub fn disconnect(&mut self) {
         if let Some(mut stream) = self.stream.take() {

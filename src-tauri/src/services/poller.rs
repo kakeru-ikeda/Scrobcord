@@ -38,7 +38,13 @@ pub fn start(app: AppHandle, state: Arc<Mutex<AppStateInner>>) -> CancellationTo
                 _ = poll_once(&app, &state, &lastfm_client, &mut prev_track, &mut no_track_ticks) => {}
             }
 
-            let interval = { state.lock().unwrap().settings.poll_interval_secs };
+            let interval = {
+                state
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .settings
+                    .poll_interval_secs
+            };
 
             tokio::select! {
                 _ = child.cancelled() => {
@@ -52,10 +58,10 @@ pub fn start(app: AppHandle, state: Arc<Mutex<AppStateInner>>) -> CancellationTo
         // 停止時に Rich Presence をクリア
         {
             let discord_client = {
-                let inner = state.lock().unwrap();
+                let inner = state.lock().unwrap_or_else(|e| e.into_inner());
                 Arc::clone(&inner.discord_client)
             };
-            let mut client = discord_client.lock().unwrap();
+            let mut client = discord_client.lock().unwrap_or_else(|e| e.into_inner());
             if client.is_connected() {
                 if let Err(e) = client.clear_activity() {
                     warn!("clear_activity on stop: {e}");
@@ -86,7 +92,7 @@ async fn poll_once(
     no_track_ticks: &mut u32,
 ) {
     let (configured_username, auth_username, authenticated, discord_enabled) = {
-        let inner = state.lock().unwrap();
+        let inner = state.lock().unwrap_or_else(|e| e.into_inner());
         (
             inner.settings.lastfm_username.clone(),
             inner.auth_status.username.clone(),
@@ -146,7 +152,7 @@ async fn poll_once(
     if track_changed {
         // 状態更新
         {
-            let mut inner = state.lock().unwrap();
+            let mut inner = state.lock().unwrap_or_else(|e| e.into_inner());
             inner.now_playing = now_playing.clone();
         }
 
@@ -159,7 +165,13 @@ async fn poll_once(
 
     // Discord RPC 更新
     if discord_enabled {
-        let settings = { state.lock().unwrap().settings.clone() };
+        let settings = {
+            state
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .settings
+                .clone()
+        };
         let state2 = Arc::clone(state);
         let app2 = app.clone();
         let track_owned = now_playing.clone();
@@ -189,12 +201,12 @@ fn update_discord(
 ) {
     // AppStateInner から discord_client の Arc だけを短時間で取り出す
     let discord_client = {
-        let inner = state.lock().unwrap();
+        let inner = state.lock().unwrap_or_else(|e| e.into_inner());
         Arc::clone(&inner.discord_client)
     };
 
     // discord_client の Mutex を保持して I/O 処理（AppStateInner の Mutex は解放済み）
-    let mut client = discord_client.lock().unwrap();
+    let mut client = discord_client.lock().unwrap_or_else(|e| e.into_inner());
     let mut newly_connected = false;
     let mut can_update_activity = true;
     let mut final_status: Option<DiscordStatus> = None;
@@ -217,17 +229,6 @@ fn update_discord(
                 });
                 can_update_activity = false;
             }
-        }
-    } else if !track_changed {
-        // 既接続・曲変化なし → PING で死活確認
-        if let Err(e) = client.ping() {
-            warn!("discord ping failed (disconnected): {e}");
-            client.disconnect();
-            final_status = Some(DiscordStatus {
-                connected: false,
-                error: Some(e),
-            });
-            can_update_activity = false;
         }
     }
 
@@ -259,7 +260,10 @@ fn update_discord(
     drop(client);
 
     if let Some(ref status) = final_status {
-        state.lock().unwrap().discord_status = status.clone();
+        state
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .discord_status = status.clone();
     }
 
     if let Some(status) = final_status {
