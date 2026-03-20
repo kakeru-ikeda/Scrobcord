@@ -117,28 +117,27 @@ async fn poll_once(
         ),
     }
 
-    // 前回と同じなら何もしない
-    if is_same_track(prev_track.as_ref(), now_playing.as_ref()) {
-        return;
-    }
+    let track_changed = !is_same_track(prev_track.as_ref(), now_playing.as_ref());
 
-    // 状態更新
-    {
-        let mut inner = state.lock().unwrap();
-        inner.now_playing = now_playing.clone();
-    }
+    if track_changed {
+        // 状態更新
+        {
+            let mut inner = state.lock().unwrap();
+            inner.now_playing = now_playing.clone();
+        }
 
-    // track-changed イベントを emit
-    app.emit("track-changed", serde_json::json!({ "track": now_playing }))
-        .unwrap_or_else(|e| warn!("emit track-changed: {e}"));
+        // track-changed イベントを emit
+        app.emit("track-changed", serde_json::json!({ "track": now_playing }))
+            .unwrap_or_else(|e| warn!("emit track-changed: {e}"));
+
+        *prev_track = now_playing.clone();
+    }
 
     // Discord RPC 更新
     if discord_enabled {
         let settings = { state.lock().unwrap().settings.clone() };
-        update_discord(app, state, &settings, now_playing.as_ref());
+        update_discord(app, state, &settings, now_playing.as_ref(), track_changed);
     }
-
-    *prev_track = now_playing;
 }
 
 /// Discord RPC の状態を更新する（同期 I/O なので mutex 保持中に実行）
@@ -147,10 +146,12 @@ fn update_discord(
     state: &Arc<Mutex<AppStateInner>>,
     settings: &Settings,
     track: Option<&Track>,
+    track_changed: bool,
 ) {
     let mut inner = state.lock().unwrap();
     let mut status_to_emit: Option<DiscordStatus> = None;
     let mut can_update_activity = true;
+    let mut newly_connected = false;
 
     // 未接続なら接続を試みる
     if !inner.discord_client.is_connected() {
@@ -163,6 +164,7 @@ fn update_discord(
                 };
                 inner.discord_status = status.clone();
                 status_to_emit = Some(status);
+                newly_connected = true;
             }
             Err(e) => {
                 warn!("discord connect: {e}");
@@ -175,9 +177,25 @@ fn update_discord(
                 can_update_activity = false;
             }
         }
+    } else if !track_changed {
+        // 既に接続済みで、曲も変わっていない場合は PING を送って死活監視
+        if let Err(e) = inner.discord_client.ping() {
+            warn!("discord ping failed (disconnected): {e}");
+            inner.discord_client.disconnect();
+            let status = DiscordStatus {
+                connected: false,
+                error: Some(e),
+            };
+            inner.discord_status = status.clone();
+            status_to_emit = Some(status);
+            can_update_activity = false;
+        }
     }
 
-    if can_update_activity && inner.discord_client.is_connected() {
+    if can_update_activity
+        && inner.discord_client.is_connected()
+        && (track_changed || newly_connected)
+    {
         if let Some(t) = track {
             if let Err(e) = inner.discord_client.set_activity(t, settings) {
                 warn!("set_activity: {e}");

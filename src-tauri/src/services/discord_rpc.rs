@@ -353,6 +353,28 @@ impl DiscordRpcClient {
         send_rpc_command(stream, &payload)
     }
 
+    /// ダミーのPINGフレームを送信して接続の生死を確認する
+    pub fn ping(&mut self) -> Result<(), String> {
+        let stream = self
+            .stream
+            .as_mut()
+            .ok_or_else(|| "Discordに接続されていません".to_string())?;
+
+        // nonceを付与してPING送信
+        self.nonce += 1;
+        let payload = json!({
+            "nonce": self.nonce.to_string()
+        });
+
+        // PING なので OP=3
+        write_frame(stream, OP_PING, &payload)?;
+
+        // PING応答は非同期に来る可能性があるためここでは受信待ちせず、
+        // 書込(write_frame)結果だけでOSレベルのパイプ切断を検知できればヨシとする。
+        // パイプが壊れていれば write_frame がエラーになって Err("Broken pipe") 等が返る
+        Ok(())
+    }
+
     /// 接続を切断する
     pub fn disconnect(&mut self) {
         if let Some(mut stream) = self.stream.take() {
