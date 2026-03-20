@@ -89,15 +89,11 @@ async fn poll_once(
 
     debug!(
         "polling: tick username='{}' authenticated={} discord_enabled={}",
-        username,
-        authenticated,
-        discord_enabled
+        username, authenticated, discord_enabled
     );
 
     if username.is_empty() {
-        warn!(
-            "polling: lastfm username is empty, skip tick (authenticated={authenticated})"
-        );
+        warn!("polling: lastfm username is empty, skip tick (authenticated={authenticated})");
         return;
     }
 
@@ -113,10 +109,12 @@ async fn poll_once(
     match now_playing.as_ref() {
         Some(track) => debug!(
             "polling: detected now playing '{}' - '{}'",
-            track.artist,
-            track.title
+            track.artist, track.title
         ),
-        None => debug!("polling: no now-playing track returned for user '{}'", username),
+        None => debug!(
+            "polling: no now-playing track returned for user '{}'",
+            username
+        ),
     }
 
     // 前回と同じなら何もしない
@@ -191,15 +189,20 @@ fn update_discord(
                 };
                 inner.discord_status = status.clone();
                 status_to_emit = Some(status);
+            } else {
+                info!("discord activity updated: '{}' - '{}'", t.artist, t.title);
             }
         } else if let Err(e) = inner.discord_client.clear_activity() {
             warn!("clear_activity: {e}");
+            inner.discord_client.disconnect();
             let status = DiscordStatus {
                 connected: false,
                 error: Some(e),
             };
             inner.discord_status = status.clone();
             status_to_emit = Some(status);
+        } else {
+            info!("discord activity cleared");
         }
     }
 

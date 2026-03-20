@@ -41,6 +41,13 @@ pub fn run() {
                 .level(log::LevelFilter::Debug)
                 .build(),
         )
+        .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+            if let Some(w) = app.get_webview_window("main") {
+                w.show().ok();
+                w.unminimize().ok();
+                w.set_focus().ok();
+            }
+        }))
         .manage(app_state)
         .setup(|app| {
             setup_app(app)?;

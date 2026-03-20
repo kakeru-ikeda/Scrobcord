@@ -10,6 +10,8 @@ use crate::models::{settings::Settings, track::Track};
 const OP_HANDSHAKE: u32 = 0;
 const OP_FRAME: u32 = 1;
 const OP_CLOSE: u32 = 2;
+const OP_PING: u32 = 3;
+const OP_PONG: u32 = 4;
 
 // ---------------------------------------------------------------------------
 // ReadWrite トレイト（Box<dyn ReadWrite> を Send にするため Send をスーパートレイト）
@@ -44,6 +46,58 @@ fn read_frame(r: &mut dyn Read) -> Result<(u32, Value), String> {
     serde_json::from_slice(&data)
         .map(|v| (op, v))
         .map_err(|e| e.to_string())
+}
+
+fn read_until_ready(stream: &mut dyn ReadWrite) -> Result<(), String> {
+    for _ in 0..8 {
+        let (op, resp) = read_frame(stream)?;
+        match op {
+            OP_CLOSE => return Err(format!("Discord が接続を閉じました: {resp}")),
+            OP_PING => {
+                write_frame(stream, OP_PONG, &resp)?;
+            }
+            OP_FRAME => {
+                if resp["cmd"].as_str() == Some("DISPATCH") && resp["evt"].as_str() == Some("READY")
+                {
+                    return Ok(());
+                }
+                if resp["evt"].as_str() == Some("ERROR") {
+                    return Err(format!("Discord READY error: {resp}"));
+                }
+            }
+            _ => {}
+        }
+    }
+
+    Err("Discord READY 応答を受信できませんでした".to_string())
+}
+
+fn send_rpc_command(stream: &mut dyn ReadWrite, payload: &Value) -> Result<(), String> {
+    log::debug!("Sending RPC command: {}", payload);
+    write_frame(stream, OP_FRAME, payload)?;
+
+    for _ in 0..8 {
+        let (op, resp) = read_frame(stream)?;
+        log::debug!("Received RPC frame: op={}, data={}", op, resp);
+        match op {
+            OP_CLOSE => return Err(format!("Discord が接続を閉じました: {resp}")),
+            OP_PING => {
+                write_frame(stream, OP_PONG, &resp)?;
+            }
+            OP_FRAME => {
+                if resp["evt"].as_str() == Some("ERROR") {
+                    // DiscordのRPCエラー（文字数制限など）はこれで検知できるはず
+                    return Err(format!("Discord RPC error: {resp}"));
+                }
+                if resp["nonce"] == payload["nonce"] {
+                    return Ok(());
+                }
+            }
+            _ => {}
+        }
+    }
+
+    Err("Discord RPC 応答を受信できませんでした".to_string())
 }
 
 // ---------------------------------------------------------------------------
@@ -96,6 +150,41 @@ fn format_rpc(template: &str, track: &Track) -> String {
 }
 
 // ---------------------------------------------------------------------------
+// 文字列バリデーション（Discord RPC は 2〜128 文字を要求する）
+// URL用の場合は長さを最大512まで許容し、...で丸めないように別関数にする
+// ---------------------------------------------------------------------------
+fn valid_rpc_str(s: &str) -> Option<String> {
+    let s = s.trim();
+    if s.is_empty() {
+        return None;
+    }
+    let chars: Vec<char> = s.chars().collect();
+    if chars.len() < 2 {
+        return Some(format!("{} ", s)); // pad
+    }
+    if chars.len() > 128 {
+        let mut t: String = chars.into_iter().take(127).collect();
+        t.push('…');
+        return Some(t);
+    }
+    Some(s.to_string())
+}
+
+fn valid_rpc_url(s: &str) -> Option<String> {
+    let s = s.trim();
+    if s.is_empty() {
+        return None;
+    }
+    let chars: Vec<char> = s.chars().collect();
+    // Discord RPC の URL 上限は通常512文字。
+    // 日本語URLエンコードが含まれると非常に長くなるが、途中カットすると無効なURIになる。
+    if chars.len() > 512 {
+        return None; // カットせずに送信を諦めるか、後述の対応を行う
+    }
+    Some(s.to_string())
+}
+
+// ---------------------------------------------------------------------------
 // ビルトイン Application ID（.env の DISCORD_APP_ID から取得）
 // ユーザーが設定しなくても動くようにするためのデフォルト値
 // ---------------------------------------------------------------------------
@@ -144,6 +233,9 @@ impl DiscordRpcClient {
         // 既存接続があれば切断
         self.disconnect();
 
+        // 実際に使用する app_id を保持（disconnect 時の close frame にも使う）
+        self.app_id = effective_id.clone();
+
         let mut stream = open_connection()?;
 
         // Handshake (op=0)
@@ -153,14 +245,8 @@ impl DiscordRpcClient {
             &json!({ "v": 1, "client_id": effective_id }),
         )?;
 
-        // READY レスポンス待ち
-        let (op, resp) = read_frame(&mut stream)?;
-        if op == OP_CLOSE {
-            return Err(format!("Discord が接続を閉じました: {resp}"));
-        }
-        if resp["cmd"].as_str() != Some("DISPATCH") || resp["evt"].as_str() != Some("READY") {
-            return Err(format!("READY を期待しましたが受信: {resp}"));
-        }
+        // READY レスポンス待ち（PING/PONG も処理）
+        read_until_ready(&mut stream)?;
 
         self.stream = Some(stream);
         Ok(())
@@ -173,55 +259,79 @@ impl DiscordRpcClient {
             .as_mut()
             .ok_or_else(|| "Discordに接続されていません".to_string())?;
 
-        let mut activity = json!({
-            "details": format_rpc(&settings.rpc_details_format, track),
-            "state":   format_rpc(&settings.rpc_state_format, track),
-        });
+        let mut activity = serde_json::Map::new();
+
+        if let Some(details) = valid_rpc_str(&format_rpc(&settings.rpc_details_format, track)) {
+            activity.insert("details".to_string(), details.into());
+        }
+
+        if let Some(state_str) = valid_rpc_str(&format_rpc(&settings.rpc_state_format, track)) {
+            activity.insert("state".to_string(), state_str.into());
+        }
 
         if settings.rpc_show_album_art {
             if let Some(ref url) = track.album_art_url {
                 if !url.is_empty() {
-                    activity["assets"] = json!({
-                        "large_image": url,
-                        "large_text":  track.album,
-                        "small_image": "lastfm",
-                    });
+                    let mut assets = serde_json::Map::new();
+                    assets.insert("large_image".to_string(), url.clone().into());
+
+                    if let Some(large_text) = valid_rpc_str(&track.album) {
+                        assets.insert("large_text".to_string(), large_text.into());
+                    }
+
+                    assets.insert("small_image".to_string(), "lastfm".into());
+                    assets.insert("small_text".to_string(), "Scrobcord".into());
+
+                    activity.insert("assets".to_string(), assets.into());
                 }
             }
         }
 
         if settings.rpc_show_timestamp {
+            let mut timestamps = serde_json::Map::new();
             let now = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap_or_default()
                 .as_secs();
-            activity["timestamps"] = json!({ "start": now });
+            timestamps.insert("start".to_string(), now.into());
+            activity.insert("timestamps".to_string(), timestamps.into());
         }
 
         if settings.rpc_show_lastfm_button {
             if let Some(ref url) = track.url {
                 if !url.is_empty() {
-                    activity["buttons"] = json!([{
-                        "label": "Last.fmで開く",
-                        "url":   url
-                    }]);
+                    // Last.fmへのリンク(URLエンコードにより長くなりがち)
+                    if let Some(url_str) = valid_rpc_url(url) {
+                        activity.insert(
+                            "buttons".to_string(),
+                            json!([{
+                                "label": "Last.fmで開く",
+                                "url":   url_str
+                            }]),
+                        );
+                    } else if url.len() > 512 {
+                        // URLが長すぎる場合はアーティストだけのURLにフォールバックするなどの工夫ができるが、
+                        // まずはボタンを省略することでエラーを回避する
+                        // activity.insert("buttons".to_string(), json!([{
+                        //    "label": "Last.fmで開く",
+                        //    "url":   "https://www.last.fm/" // 究極のフォールバック
+                        // }]));
+                    }
                 }
             }
         }
 
         self.nonce += 1;
-        write_frame(
-            stream,
-            OP_FRAME,
-            &json!({
-                "cmd": "SET_ACTIVITY",
-                "args": {
-                    "pid": std::process::id(),
-                    "activity": activity
-                },
-                "nonce": self.nonce.to_string()
-            }),
-        )
+        let payload = json!({
+            "cmd": "SET_ACTIVITY",
+            "args": {
+                "pid": std::process::id(),
+                "activity": activity
+            },
+            "nonce": self.nonce.to_string()
+        });
+
+        send_rpc_command(stream, &payload)
     }
 
     /// Rich Presence をクリアする（再生停止時）
@@ -232,18 +342,15 @@ impl DiscordRpcClient {
             .ok_or_else(|| "Discordに接続されていません".to_string())?;
 
         self.nonce += 1;
-        write_frame(
-            stream,
-            OP_FRAME,
-            &json!({
-                "cmd": "SET_ACTIVITY",
-                "args": {
-                    "pid": std::process::id(),
-                    "activity": null
-                },
-                "nonce": self.nonce.to_string()
-            }),
-        )
+        let payload = json!({
+            "cmd": "SET_ACTIVITY",
+            "args": {
+                "pid": std::process::id()
+            },
+            "nonce": self.nonce.to_string()
+        });
+
+        send_rpc_command(stream, &payload)
     }
 
     /// 接続を切断する
