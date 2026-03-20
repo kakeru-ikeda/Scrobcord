@@ -2,11 +2,10 @@
 import { useState } from "react";
 import { ExternalLink, LogOut, CheckCircle } from "lucide-react";
 import { Button } from "../ui/button";
-import { Input } from "../ui/input";
-import { Label } from "../ui/label";
 import {
   lastfmGetAuthToken,
   lastfmGetSession,
+  lastfmGetAuthStatus,
   lastfmLogout,
 } from "../../lib/tauriInvoke";
 import { useAppStore } from "../../store/appStore";
@@ -17,7 +16,7 @@ interface Props {
   onChange: (patch: Partial<Settings>) => void;
 }
 
-export default function LastfmSettings({ settings, onChange }: Props) {
+export default function LastfmSettings({ settings: _settings, onChange: _onChange }: Props) {
   const lastfmStatus = useAppStore((s) => s.lastfmStatus);
   const setLastfmStatus = useAppStore((s) => s.setLastfmStatus);
 
@@ -42,8 +41,12 @@ export default function LastfmSettings({ settings, onChange }: Props) {
     setError(null);
     setPending("session");
     try {
-      await lastfmGetSession(""); // token は Rust 側で保持済み
+      await lastfmGetSession();
       setAwaitingCallback(false);
+      // イベントを待たずに直接ストアを更新
+
+      const status = await lastfmGetAuthStatus();
+      setLastfmStatus(status);
     } catch (e) {
       setError(String(e));
     } finally {
@@ -67,31 +70,6 @@ export default function LastfmSettings({ settings, onChange }: Props) {
 
   return (
     <div className="flex flex-col gap-4">
-      {/* API Key */}
-      <div className="flex flex-col gap-1.5">
-        <Label htmlFor="api-key">API Key</Label>
-        <Input
-          id="api-key"
-          value={settings.lastfm_api_key}
-          onChange={(e) => onChange({ lastfm_api_key: e.target.value })}
-          placeholder="Last.fm API Key"
-          autoComplete="off"
-        />
-      </div>
-
-      {/* API Secret */}
-      <div className="flex flex-col gap-1.5">
-        <Label htmlFor="api-secret">API Secret</Label>
-        <Input
-          id="api-secret"
-          type="password"
-          value={settings.lastfm_api_secret}
-          onChange={(e) => onChange({ lastfm_api_secret: e.target.value })}
-          placeholder="入力後に keyring へ保存されます"
-          autoComplete="new-password"
-        />
-      </div>
-
       {/* 認証状態 */}
       {lastfmStatus.authenticated ? (
         <div className="flex items-center justify-between rounded-md bg-green-500/10 px-3 py-2">
@@ -115,7 +93,7 @@ export default function LastfmSettings({ settings, onChange }: Props) {
             variant="default"
             size="sm"
             onClick={handleLogin}
-            disabled={!settings.lastfm_api_key || !settings.lastfm_api_secret || pending === "token"}
+            disabled={pending === "token"}
             className="w-full"
           >
             <ExternalLink className="mr-1.5 h-3.5 w-3.5" />

@@ -126,11 +126,11 @@
 
 ## Phase 8 — トレイアイコン・スタートアップ
 
-- [ ] トレイアイコン画像（PNG 32×32）を `src-tauri/icons/` に追加
-- [ ] `main.rs` にトレイメニュー（表示 / 停止・再開 / 終了）を実装
-- [ ] ウィンドウの閉じるボタンでトレイに最小化（`minimize_to_tray=true` 時）
-- [ ] `tauri-plugin-autostart` を `start_on_login` 設定と連動
-- [ ] アプリ起動時に自動的に `start_polling` を実行（設定読み込み後）
+- [x] トレイアイコン画像（PNG 32×32）を `src-tauri/icons/` に追加
+- [x] `lib.rs` にトレイメニュー（表示 / 停止・再開 / 終了）を実装
+- [x] ウィンドウの閉じるボタンでトレイに最小化（`minimize_to_tray=true` 時）
+- [x] `tauri-plugin-autostart` を `start_on_login` 設定と連動
+- [x] アプリ起動時に自動的に `start_polling` を実行（設定読み込み後）
 
 ---
 

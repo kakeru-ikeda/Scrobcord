@@ -15,6 +15,9 @@ pub struct AppStateInner {
     pub now_playing: Option<Track>,
     pub poll_cancel_token: Option<CancellationToken>,
     pub discord_client: DiscordRpcClient,
+    /// Last.fm OAuth の一時トークン（getToken → getSession 間のみ保持）
+    #[allow(dead_code)]
+    pub pending_auth_token: Option<String>,
 }
 
 pub struct AppState(pub Arc<Mutex<AppStateInner>>);

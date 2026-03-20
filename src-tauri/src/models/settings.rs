@@ -3,9 +3,6 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Settings {
     // Last.fm
-    pub lastfm_api_key: String,
-    /// UI 入力後に keyring へ移動するため Store には保存しない
-    pub lastfm_api_secret: String,
     pub lastfm_username: String,
 
     // Discord RPC
@@ -27,8 +24,6 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
-            lastfm_api_key: String::new(),
-            lastfm_api_secret: String::new(),
             lastfm_username: String::new(),
             discord_app_id: String::new(),
             discord_enabled: true,

@@ -25,6 +25,7 @@ pub fn run() {
         now_playing: None,
         poll_cancel_token: None,
         discord_client: DiscordRpcClient::new(String::new()),
+        pending_auth_token: None,
     })));
 
     tauri::Builder::default()
@@ -42,11 +43,21 @@ pub fn run() {
         )
         .manage(app_state)
         .setup(|app| {
-            // ストアから設定を読み込み AppState に反映
-            let loaded = commands::settings::load_settings_from_store(app.handle());
-            let state = app.state::<AppState>();
-            state.0.lock().unwrap().settings = loaded;
+            setup_app(app)?;
             Ok(())
+        })
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                let minimize = {
+                    let state = window.state::<AppState>();
+                    let guard = state.0.lock().unwrap();
+                    guard.settings.minimize_to_tray
+                };
+                if minimize {
+                    api.prevent_close();
+                    window.hide().ok();
+                }
+            }
         })
         .invoke_handler(tauri::generate_handler![
             commands::auth::lastfm_get_auth_token,
@@ -64,4 +75,104 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
+    use tauri::menu::{Menu, MenuItem};
+    use tauri::tray::TrayIconBuilder;
+    use tauri_plugin_autostart::ManagerExt as AutostartManagerExt;
+
+    // ストアから設定を読み込み AppState に反映
+    let loaded = commands::settings::load_settings_from_store(app.handle());
+    let start_on_login = loaded.start_on_login;
+
+    {
+        let state = app.state::<AppState>();
+        state.0.lock().unwrap().settings = loaded;
+    }
+
+    // autostart の有効/無効を設定と同期
+    let autostart = app.autolaunch();
+    if start_on_login {
+        autostart.enable().ok();
+    } else {
+        autostart.disable().ok();
+    }
+
+    // トレイメニューを構築
+    let show_item = MenuItem::with_id(app, "show", "表示", true, None::<&str>)?;
+    let toggle_item = MenuItem::with_id(app, "toggle", "停止 / 再開", true, None::<&str>)?;
+    let quit_item = MenuItem::with_id(app, "quit", "終了", true, None::<&str>)?;
+    let menu = Menu::with_items(app, &[&show_item, &toggle_item, &quit_item])?;
+
+    TrayIconBuilder::with_id("main")
+        .icon(app.default_window_icon().unwrap().clone())
+        .menu(&menu)
+        .tooltip("Scrobcord")
+        .on_menu_event(|app, event| match event.id.as_ref() {
+            "show" => {
+                if let Some(w) = app.get_webview_window("main") {
+                    w.show().ok();
+                    w.set_focus().ok();
+                }
+            }
+            "toggle" => {
+                let state = app.state::<AppState>();
+                let running = state.0.lock().unwrap().poll_cancel_token.is_some();
+                if running {
+                    // 停止
+                    if let Some(token) = state.0.lock().unwrap().poll_cancel_token.take() {
+                        token.cancel();
+                    }
+                } else {
+                    // 再開
+                    let arc = Arc::clone(&state.0);
+                    let token = crate::services::poller::start(app.clone(), arc);
+                    state.0.lock().unwrap().poll_cancel_token = Some(token);
+                }
+            }
+            "quit" => {
+                // ポーリングを止めてから終了
+                if let Some(token) = app
+                    .state::<AppState>()
+                    .0
+                    .lock()
+                    .unwrap()
+                    .poll_cancel_token
+                    .take()
+                {
+                    token.cancel();
+                }
+                app.exit(0);
+            }
+            _ => {}
+        })
+        .on_tray_icon_event(|tray, event| {
+            // 左クリックでウィンドウを表示/非表示トグル
+            if let tauri::tray::TrayIconEvent::Click {
+                button: tauri::tray::MouseButton::Left,
+                button_state: tauri::tray::MouseButtonState::Up,
+                ..
+            } = event
+            {
+                let app = tray.app_handle();
+                if let Some(w) = app.get_webview_window("main") {
+                    if w.is_visible().unwrap_or(false) {
+                        w.hide().ok();
+                    } else {
+                        w.show().ok();
+                        w.set_focus().ok();
+                    }
+                }
+            }
+        })
+        .build(app)?;
+
+    // 設定読み込み後に自動ポーリング開始
+    let arc = Arc::clone(&app.state::<AppState>().0);
+    let handle = app.handle().clone();
+    let token = crate::services::poller::start(handle, arc);
+    app.state::<AppState>().0.lock().unwrap().poll_cancel_token = Some(token);
+
+    Ok(())
 }

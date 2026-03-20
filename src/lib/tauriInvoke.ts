@@ -24,8 +24,6 @@ export interface DiscordStatus {
 }
 
 export interface Settings {
-  lastfm_api_key: string;
-  lastfm_api_secret: string;
   lastfm_username: string;
   discord_app_id: string;
   discord_enabled: boolean;
@@ -45,10 +43,10 @@ export interface Settings {
 // ---------------------------------------------------------------------------
 
 export const lastfmGetAuthToken = () =>
-  invoke<string>("lastfm_get_auth_token");
+  invoke<void>("lastfm_get_auth_token");
 
-export const lastfmGetSession = (token: string) =>
-  invoke<void>("lastfm_get_session", { token });
+export const lastfmGetSession = () =>
+  invoke<void>("lastfm_get_session");
 
 export const lastfmLogout = () =>
   invoke<void>("lastfm_logout");

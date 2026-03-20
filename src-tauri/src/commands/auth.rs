@@ -8,7 +8,6 @@ use crate::state::AppState;
 
 const KEYRING_SERVICE: &str = "scrobcord";
 const KEYRING_SESSION_KEY: &str = "lastfm_session_key";
-const KEYRING_API_SECRET: &str = "lastfm_api_secret";
 
 /// OS キーチェーンから session_key を読む
 pub fn load_session_key() -> Option<String> {
@@ -25,21 +24,6 @@ fn store_session_key(key: &str) -> Result<(), String> {
         .map_err(|e| e.to_string())
 }
 
-/// OS キーチェーンに api_secret を保存する
-pub fn store_api_secret(secret: &str) -> Result<(), String> {
-    Entry::new(KEYRING_SERVICE, KEYRING_API_SECRET)
-        .map_err(|e| e.to_string())?
-        .set_password(secret)
-        .map_err(|e| e.to_string())
-}
-
-/// OS キーチェーンから api_secret を読む
-pub fn load_api_secret() -> Option<String> {
-    Entry::new(KEYRING_SERVICE, KEYRING_API_SECRET)
-        .ok()
-        .and_then(|e| e.get_password().ok())
-}
-
 // ---------------------------------------------------------------------------
 // Tauri コマンド
 // ---------------------------------------------------------------------------
@@ -48,72 +32,52 @@ pub fn load_api_secret() -> Option<String> {
 pub async fn lastfm_get_auth_token(
     app: AppHandle,
     state: tauri::State<'_, AppState>,
-) -> Result<String, String> {
-    let (api_key, api_secret) = {
-        let inner = state.0.lock().unwrap();
-        (
-            inner.settings.lastfm_api_key.clone(),
-            // keyring 優先、なければ Settings のフィールド（まだ保存前）
-            load_api_secret()
-                .or_else(|| {
-                    let s = inner.settings.lastfm_api_secret.clone();
-                    if s.is_empty() {
-                        None
-                    } else {
-                        Some(s)
-                    }
-                })
-                .unwrap_or_default(),
-        )
-    };
+) -> Result<(), String> {
+    let client = LastfmClient::new();
 
-    if api_key.is_empty() {
-        return Err("Last.fm API Key が設定されていません".to_string());
-    }
-    if api_secret.is_empty() {
-        return Err("Last.fm API Secret が設定されていません".to_string());
+    if client.api_key.is_empty() {
+        return Err(
+            "LASTFM_API_KEY がビルド時に埋め込まれていません。環境変数を設定して再ビルドしてください"
+                .to_string(),
+        );
     }
 
-    let client = LastfmClient::new(api_key.clone(), api_secret);
     let token = client.get_token().await?;
+
+    // トークンを AppState に保持（getSession 呼び出しまで保管）
+    state.0.lock().unwrap().pending_auth_token = Some(token.clone());
 
     // ブラウザで認証 URL を開く
     let auth_url = format!(
         "https://www.last.fm/api/auth/?api_key={}&token={}",
-        api_key, token
+        client.api_key, token
     );
     app.opener()
         .open_url(&auth_url, None::<&str>)
         .map_err(|e| e.to_string())?;
 
-    Ok(token)
+    Ok(())
 }
 
 #[tauri::command]
 pub async fn lastfm_get_session(
-    token: String,
     app: AppHandle,
     state: tauri::State<'_, AppState>,
 ) -> Result<(), String> {
-    let (api_key, api_secret) = {
-        let inner = state.0.lock().unwrap();
-        (
-            inner.settings.lastfm_api_key.clone(),
-            load_api_secret()
-                .or_else(|| {
-                    let s = inner.settings.lastfm_api_secret.clone();
-                    if s.is_empty() {
-                        None
-                    } else {
-                        Some(s)
-                    }
-                })
-                .unwrap_or_default(),
-        )
-    };
+    // AppState に保存しておいた一時トークンを取り出す
+    let token = state
+        .0
+        .lock()
+        .unwrap()
+        .pending_auth_token
+        .clone()
+        .ok_or_else(|| "先に [Last.fm でログイン] をクリックしてください".to_string())?;
 
-    let client = LastfmClient::new(api_key, api_secret);
+    let client = LastfmClient::new();
     let session_key = client.get_session(&token).await?;
+
+    // 一時トークンをクリア
+    state.0.lock().unwrap().pending_auth_token = None;
 
     // keyring に保存（平文ファイルには書かない）
     store_session_key(&session_key)?;

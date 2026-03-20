@@ -4,6 +4,16 @@ use crate::models::track::Track;
 
 const API_ROOT: &str = "https://ws.audioscrobbler.com/2.0/";
 
+// ビルド時に環境変数 LASTFM_API_KEY / LASTFM_API_SECRET を埋め込む
+const EMBEDDED_API_KEY: &str = match option_env!("LASTFM_API_KEY") {
+    Some(k) => k,
+    None => "",
+};
+const EMBEDDED_API_SECRET: &str = match option_env!("LASTFM_API_SECRET") {
+    Some(k) => k,
+    None => "",
+};
+
 pub struct LastfmClient {
     pub api_key: String,
     api_secret: String,
@@ -11,10 +21,10 @@ pub struct LastfmClient {
 }
 
 impl LastfmClient {
-    pub fn new(api_key: String, api_secret: String) -> Self {
+    pub fn new() -> Self {
         Self {
-            api_key,
-            api_secret,
+            api_key: EMBEDDED_API_KEY.to_string(),
+            api_secret: EMBEDDED_API_SECRET.to_string(),
             client: reqwest::Client::new(),
         }
     }
@@ -196,10 +206,12 @@ mod tests {
 
     #[test]
     fn test_sign_correct_order_and_hash() {
-        // Last.fm 公式ドキュメントの例に基づく検証
-        // params: api_key=xxx, method=auth.getToken, secret=yyy
-        // 期待値: MD5("api_keyxxxmethodauth.getTokenyyy")
-        let client = LastfmClient::new("xxx".to_string(), "yyy".to_string());
+        // params: api_key=xxx, method=auth.getToken, secret=yyy のテスト用に直接インスタンス生成
+        let client = LastfmClient {
+            api_key: "xxx".to_string(),
+            api_secret: "yyy".to_string(),
+            client: reqwest::Client::new(),
+        };
         let mut params: BTreeMap<&str, String> = BTreeMap::new();
         params.insert("api_key", "xxx".to_string());
         params.insert("method", "auth.getToken".to_string());
@@ -212,7 +224,11 @@ mod tests {
 
     #[test]
     fn test_sign_keys_sorted_lexicographically() {
-        let client = LastfmClient::new("mykey".to_string(), "mysecret".to_string());
+        let client = LastfmClient {
+            api_key: "mykey".to_string(),
+            api_secret: "mysecret".to_string(),
+            client: reqwest::Client::new(),
+        };
         let mut params: BTreeMap<&str, String> = BTreeMap::new();
         params.insert("token", "mytoken".to_string());
         params.insert("api_key", "mykey".to_string());

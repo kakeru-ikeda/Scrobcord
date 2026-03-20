@@ -9,12 +9,12 @@ use crate::models::{settings::Settings, track::Track};
 use crate::services::lastfm::LastfmClient;
 use crate::state::AppStateInner;
 
-/// ポーリングタスクを tokio::spawn で起動し CancellationToken を返す
+/// ポーリングタスクを tauri::async_runtime::spawn で起動し CancellationToken を返す
 pub fn start(app: AppHandle, state: Arc<Mutex<AppStateInner>>) -> CancellationToken {
     let token = CancellationToken::new();
     let child = token.clone();
 
-    tokio::spawn(async move {
+    tauri::async_runtime::spawn(async move {
         info!("polling: started");
         app.emit(
             "polling-status-changed",
@@ -71,21 +71,19 @@ async fn poll_once(
     state: &Arc<Mutex<AppStateInner>>,
     prev_track: &mut Option<Track>,
 ) {
-    let (api_key, api_secret, username, discord_enabled) = {
+    let (username, discord_enabled) = {
         let inner = state.lock().unwrap();
         (
-            inner.settings.lastfm_api_key.clone(),
-            crate::commands::auth::load_api_secret().unwrap_or_default(),
             inner.settings.lastfm_username.clone(),
             inner.settings.discord_enabled,
         )
     };
 
-    if api_key.is_empty() || username.is_empty() {
+    if username.is_empty() {
         return;
     }
 
-    let client = LastfmClient::new(api_key, api_secret);
+    let client = LastfmClient::new();
     let now_playing = match client.get_now_playing(&username).await {
         Ok(t) => t,
         Err(e) => {

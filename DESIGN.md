@@ -112,6 +112,9 @@ tauri-plugin-log     = "2"
 
 ## Last.fm 認証フロー
 
+> API Key / API Secret はビルド時に環境変数 `LASTFM_API_KEY` / `LASTFM_API_SECRET` でバイナリに埋め込む。
+> ユーザーは API キーを入力不要。
+
 ```
 [「Last.fm でログイン」クリック]
         │
@@ -222,8 +225,6 @@ get_now_playing() -> Option<Track>
 ```rust
 pub struct Settings {
     // Last.fm
-    pub lastfm_api_key: String,
-    pub lastfm_api_secret: String,   // UI 入力後に keyring へ移動
     pub lastfm_username: String,     // 認証後に自動設定
 
     // Discord RPC
@@ -267,7 +268,7 @@ pub struct Settings {
 
 ### Settings タブ
 
-**「Last.fm」** — API Key / API Secret 入力、`[Last.fm でログイン]`→ブラウザ起動、`[承認完了]`→セッション取得、ユーザー名表示、ログアウト
+**「Last.fm」** — `[Last.fm でログイン]`→ブラウザ起動、`[承認完了]`→セッション取得、ユーザー名表示、ログアウト
 
 **「Discord RPC」** — Application ID、Details フォーマット、State フォーマット、アルバムアート toggle、タイムスタンプ toggle、Last.fm ボタン toggle、フォーマットプレビュー
 

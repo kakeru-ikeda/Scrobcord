@@ -1,7 +1,7 @@
 use tauri::AppHandle;
+use tauri_plugin_autostart::ManagerExt as AutostartManagerExt;
 use tauri_plugin_store::StoreExt;
 
-use crate::commands::auth::store_api_secret;
 use crate::models::settings::Settings;
 use crate::state::AppState;
 
@@ -16,38 +16,33 @@ pub fn load_settings_from_store(app: &AppHandle) -> Settings {
     store
         .get(STORE_KEY)
         .and_then(|v| serde_json::from_value(v).ok())
-        .map(|mut s: Settings| {
-            // ストアに api_secret が万一残っていても使わない
-            s.lastfm_api_secret = String::new();
-            s
-        })
         .unwrap_or_default()
 }
 
 #[tauri::command]
 pub fn get_settings(state: tauri::State<'_, AppState>) -> Settings {
-    // api_secret は keyring にあるため、返す時は空にする（UI 側でマスク表示）
-    let mut s = state.0.lock().unwrap().settings.clone();
-    s.lastfm_api_secret = String::new();
-    s
+    state.0.lock().unwrap().settings.clone()
 }
 
 #[tauri::command]
 pub async fn save_settings(
     app: AppHandle,
-    mut settings: Settings,
+    settings: Settings,
     state: tauri::State<'_, AppState>,
 ) -> Result<(), String> {
-    // api_secret が空でなければ keyring に保存してフィールドをクリア
-    if !settings.lastfm_api_secret.is_empty() {
-        store_api_secret(&settings.lastfm_api_secret)?;
-        settings.lastfm_api_secret = String::new();
-    }
-
     // AppState を更新
+    let start_on_login = settings.start_on_login;
     {
         let mut inner = state.0.lock().unwrap();
         inner.settings = settings.clone();
+    }
+
+    // autostart と同期
+    let autostart = app.autolaunch();
+    if start_on_login {
+        autostart.enable().map_err(|e| format!("autostart enable: {e}"))?;
+    } else {
+        autostart.disable().map_err(|e| format!("autostart disable: {e}"))?;
     }
 
     // tauri-plugin-store へ永続化
@@ -81,8 +76,6 @@ mod tests {
     #[test]
     fn settings_json_round_trip() {
         let original = Settings {
-            lastfm_api_key: "mykey".to_string(),
-            lastfm_api_secret: String::new(),
             lastfm_username: "user123".to_string(),
             discord_app_id: "123456789".to_string(),
             discord_enabled: false,
@@ -98,7 +91,6 @@ mod tests {
         };
         let json = serde_json::to_string(&original).unwrap();
         let restored: Settings = serde_json::from_str(&json).unwrap();
-        assert_eq!(restored.lastfm_api_key, original.lastfm_api_key);
         assert_eq!(restored.poll_interval_secs, original.poll_interval_secs);
         assert_eq!(restored.discord_enabled, original.discord_enabled);
         assert_eq!(restored.language, original.language);
