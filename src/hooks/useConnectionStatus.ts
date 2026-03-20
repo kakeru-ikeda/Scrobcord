@@ -1,7 +1,13 @@
 import { useEffect } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { useAppStore } from "../store/appStore";
-import type { AuthStatus, DiscordStatus } from "../lib/tauriInvoke";
+import {
+  discordConnect,
+  discordGetStatus,
+  lastfmGetAuthStatus,
+  type AuthStatus,
+  type DiscordStatus,
+} from "../lib/tauriInvoke";
 
 export function useConnectionStatus() {
   const setDiscordStatus = useAppStore((s) => s.setDiscordStatus);
@@ -9,6 +15,25 @@ export function useConnectionStatus() {
   const setPollingRunning = useAppStore((s) => s.setPollingRunning);
 
   useEffect(() => {
+    (async () => {
+      try {
+        const auth = await lastfmGetAuthStatus();
+        setLastfmStatus(auth);
+      } catch {
+      }
+
+      try {
+        await discordConnect();
+      } catch {
+      }
+
+      try {
+        const discord = await discordGetStatus();
+        setDiscordStatus(discord);
+      } catch {
+      }
+    })();
+
     const unlistenDiscord = listen<DiscordStatus>(
       "discord-status-changed",
       (e) => setDiscordStatus(e.payload)

@@ -44,18 +44,6 @@ export default function DiscordSettings({ settings, onChange }: Props) {
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Application ID */}
-      <div className="flex flex-col gap-1.5">
-        <Label htmlFor="app-id">Discord Application ID</Label>
-        <Input
-          id="app-id"
-          value={settings.discord_app_id}
-          onChange={(e) => onChange({ discord_app_id: e.target.value })}
-          placeholder="例: 1234567890123456789"
-          autoComplete="off"
-        />
-      </div>
-
       {/* Details フォーマット */}
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="details-fmt">

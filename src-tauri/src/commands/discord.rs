@@ -3,6 +3,7 @@ use std::sync::Arc;
 use tauri::{AppHandle, Emitter};
 
 use crate::models::status::DiscordStatus;
+use crate::services::discord_rpc::DiscordRpcClient;
 use crate::state::AppState;
 
 #[tauri::command]
@@ -13,11 +14,22 @@ pub async fn discord_connect(
     let arc = Arc::clone(&state.0);
 
     let result = tokio::task::spawn_blocking(move || {
-        let mut inner = arc.lock().unwrap();
-        // app_id を settings から同期
-        let app_id = inner.settings.discord_app_id.clone();
-        inner.discord_client.app_id = app_id;
-        inner.discord_client.connect()
+        // app_id だけ先に取り出し、重い接続処理中は mutex を保持しない
+        let app_id = {
+            let inner = arc.lock().unwrap();
+            inner.settings.discord_app_id.clone()
+        };
+
+        let mut new_client = DiscordRpcClient::new(app_id);
+        let connect_result = new_client.connect();
+
+        if connect_result.is_ok() {
+            let mut inner = arc.lock().unwrap();
+            inner.discord_client.disconnect();
+            inner.discord_client = new_client;
+        }
+
+        connect_result
     })
     .await
     .map_err(|e| e.to_string())?;

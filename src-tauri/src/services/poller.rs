@@ -5,7 +5,7 @@ use tauri::{AppHandle, Emitter};
 use tokio::time::{sleep, Duration};
 use tokio_util::sync::CancellationToken;
 
-use crate::models::{settings::Settings, track::Track};
+use crate::models::{settings::Settings, status::DiscordStatus, track::Track};
 use crate::services::lastfm::LastfmClient;
 use crate::state::AppStateInner;
 
@@ -110,33 +110,77 @@ async fn poll_once(
     // Discord RPC 更新
     if discord_enabled {
         let settings = { state.lock().unwrap().settings.clone() };
-        update_discord(state, &settings, now_playing.as_ref());
+        update_discord(app, state, &settings, now_playing.as_ref());
     }
 
     *prev_track = now_playing;
 }
 
 /// Discord RPC の状態を更新する（同期 I/O なので mutex 保持中に実行）
-fn update_discord(state: &Arc<Mutex<AppStateInner>>, settings: &Settings, track: Option<&Track>) {
+fn update_discord(
+    app: &AppHandle,
+    state: &Arc<Mutex<AppStateInner>>,
+    settings: &Settings,
+    track: Option<&Track>,
+) {
     let mut inner = state.lock().unwrap();
+    let mut status_to_emit: Option<DiscordStatus> = None;
+    let mut can_update_activity = true;
 
     // 未接続なら接続を試みる
     if !inner.discord_client.is_connected() {
         inner.discord_client.app_id = settings.discord_app_id.clone();
-        if let Err(e) = inner.discord_client.connect() {
-            warn!("discord connect: {e}");
-            return;
+        match inner.discord_client.connect() {
+            Ok(()) => {
+                let status = DiscordStatus {
+                    connected: true,
+                    error: None,
+                };
+                inner.discord_status = status.clone();
+                status_to_emit = Some(status);
+            }
+            Err(e) => {
+                warn!("discord connect: {e}");
+                let status = DiscordStatus {
+                    connected: false,
+                    error: Some(e),
+                };
+                inner.discord_status = status.clone();
+                status_to_emit = Some(status);
+                can_update_activity = false;
+            }
         }
     }
 
-    if let Some(t) = track {
-        if let Err(e) = inner.discord_client.set_activity(t, settings) {
-            warn!("set_activity: {e}");
-            // ソケット切断の可能性があるのでリセット
-            inner.discord_client.disconnect();
+    if can_update_activity && inner.discord_client.is_connected() {
+        if let Some(t) = track {
+            if let Err(e) = inner.discord_client.set_activity(t, settings) {
+                warn!("set_activity: {e}");
+                // ソケット切断の可能性があるのでリセット
+                inner.discord_client.disconnect();
+                let status = DiscordStatus {
+                    connected: false,
+                    error: Some(e),
+                };
+                inner.discord_status = status.clone();
+                status_to_emit = Some(status);
+            }
+        } else if let Err(e) = inner.discord_client.clear_activity() {
+            warn!("clear_activity: {e}");
+            let status = DiscordStatus {
+                connected: false,
+                error: Some(e),
+            };
+            inner.discord_status = status.clone();
+            status_to_emit = Some(status);
         }
-    } else if let Err(e) = inner.discord_client.clear_activity() {
-        warn!("clear_activity: {e}");
+    }
+
+    drop(inner);
+
+    if let Some(status) = status_to_emit {
+        app.emit("discord-status-changed", &status)
+            .unwrap_or_else(|e| warn!("emit discord-status-changed: {e}"));
     }
 }
 

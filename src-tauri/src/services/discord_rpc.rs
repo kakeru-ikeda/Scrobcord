@@ -41,7 +41,9 @@ fn read_frame(r: &mut dyn Read) -> Result<(u32, Value), String> {
     }
     let mut data = vec![0u8; len];
     r.read_exact(&mut data).map_err(|e| e.to_string())?;
-    serde_json::from_slice(&data).map(|v| (op, v)).map_err(|e| e.to_string())
+    serde_json::from_slice(&data)
+        .map(|v| (op, v))
+        .map_err(|e| e.to_string())
 }
 
 // ---------------------------------------------------------------------------
@@ -94,6 +96,15 @@ fn format_rpc(template: &str, track: &Track) -> String {
 }
 
 // ---------------------------------------------------------------------------
+// ビルトイン Application ID（.env の DISCORD_APP_ID から取得）
+// ユーザーが設定しなくても動くようにするためのデフォルト値
+// ---------------------------------------------------------------------------
+const BUILTIN_APP_ID: &str = match option_env!("DISCORD_APP_ID") {
+    Some(id) => id,
+    None => "",
+};
+
+// ---------------------------------------------------------------------------
 // DiscordRpcClient
 // ---------------------------------------------------------------------------
 pub struct DiscordRpcClient {
@@ -104,7 +115,11 @@ pub struct DiscordRpcClient {
 
 impl DiscordRpcClient {
     pub fn new(app_id: String) -> Self {
-        Self { app_id, stream: None, nonce: 0 }
+        Self {
+            app_id,
+            stream: None,
+            nonce: 0,
+        }
     }
 
     pub fn is_connected(&self) -> bool {
@@ -113,9 +128,18 @@ impl DiscordRpcClient {
 
     /// Discord IPC に接続して handshake を完了する
     pub fn connect(&mut self) -> Result<(), String> {
-        if self.app_id.is_empty() {
-            return Err("Discord Application ID が設定されていません".to_string());
-        }
+        // ユーザー設定の app_id が空ならビルトイン ID を使用
+        let effective_id = if self.app_id.is_empty() {
+            if BUILTIN_APP_ID.is_empty() {
+                return Err(
+                    "Discord Application ID が設定されていません（ビルトイン ID もありません）"
+                        .to_string(),
+                );
+            }
+            BUILTIN_APP_ID.to_string()
+        } else {
+            self.app_id.clone()
+        };
 
         // 既存接続があれば切断
         self.disconnect();
@@ -126,7 +150,7 @@ impl DiscordRpcClient {
         write_frame(
             &mut stream,
             OP_HANDSHAKE,
-            &json!({ "v": 1, "client_id": self.app_id }),
+            &json!({ "v": 1, "client_id": effective_id }),
         )?;
 
         // READY レスポンス待ち
@@ -233,4 +257,3 @@ impl DiscordRpcClient {
         }
     }
 }
-
