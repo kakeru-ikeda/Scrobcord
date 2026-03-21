@@ -23,11 +23,13 @@ pub fn start(app: AppHandle, state: Arc<Mutex<AppStateInner>>) -> CancellationTo
         .unwrap_or_else(|e| warn!("emit polling-status-changed: {e}"));
 
         let mut prev_track: Option<Track> = None;
-        // Last.fm が曲切り替えタイミングで一瞬 null を返すことがある。
-        // 2回連続 null を確認してから初めてアクティビティをクリアする。
         let mut no_track_ticks: u32 = 0;
         // AppState から共有クライアントを取得（reqwest コネクションプールを使い回す）
-        let lastfm_client = state.lock().unwrap_or_else(|e| e.into_inner()).lastfm_client.clone();
+        let lastfm_client = state
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .lastfm_client
+            .clone();
 
         loop {
             tokio::select! {
@@ -80,8 +82,10 @@ pub fn start(app: AppHandle, state: Arc<Mutex<AppStateInner>>) -> CancellationTo
     token
 }
 
-/// null が何連続したらアクティビティをクリアするか（曲切り替え時の一瞬の gap を吸収）
-const CLEAR_THRESHOLD: u32 = 2;
+/// null が何連続したらアクティビティをクリアするか
+/// 15秒ポーリングでは曲切り替え時の一瞬の gap を踏む確率は非常に低いため 1 で十分。
+/// ポーズ時は1ティック（最大15秒）でアクティビティがクリアされる。
+const CLEAR_THRESHOLD: u32 = 1;
 
 /// 1回のポーリング処理
 async fn poll_once(
@@ -138,8 +142,7 @@ async fn poll_once(
                 "polling: no now-playing track returned for user '{}' (no_track_ticks={})",
                 username, no_track_ticks
             );
-            // CLEAR_THRESHOLD 未満の場合はアクティビティを維持する
-            // （曲切り替えタイミングで Last.fm が一瞬 null を返す "gap" を吸収）
+            // CLEAR_THRESHOLD 以上の場合のみアクティビティをクリアする
             if *no_track_ticks < CLEAR_THRESHOLD {
                 return;
             }
