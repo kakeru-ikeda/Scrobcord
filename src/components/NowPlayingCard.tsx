@@ -16,7 +16,7 @@ export default function NowPlayingCard() {
   }
 
   return (
-    <div className="flex items-start gap-4 p-4">
+    <div className="flex items-center gap-4 p-4">
       {/* アルバムアート */}
       <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-md bg-muted">
         {track.album_art_url ? (
