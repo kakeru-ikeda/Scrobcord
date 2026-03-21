@@ -32,3 +32,11 @@
     -webkit-user-select: none;
   }
 }
+
+/* ネイティブスクロールバーを完全に非表示（カスタムバー使用箇所で付与するクラス） */
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.hide-scrollbar {
+  scrollbar-width: none; /* Firefox */
+}

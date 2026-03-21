@@ -1,5 +1,6 @@
 import { Music, ChevronLeft, ChevronRight, RotateCcw } from "lucide-react";
 import { Button } from "./ui/button";
+import { ScrollArea } from "./ui/scroll-area";
 import { useScrobbleHistory } from "../hooks/useScrobbleHistory";
 import { useAppStore } from "../store/appStore";
 import { formatRelativeTime } from "../lib/utils";
@@ -45,7 +46,7 @@ function TrackRow({ track }: { track: ScrobbledTrack }) {
         {track.now_playing ? (
           <span className="inline-flex items-center gap-1 rounded-full bg-green-500/15 px-1.5 py-0.5 text-[10px] font-medium text-green-400">
             <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-green-400" />
-            いま再生中
+            Now Playing
           </span>
         ) : (
           <span className="text-[10px] text-muted-foreground">
@@ -105,7 +106,7 @@ export default function ScrobbleHistory() {
       </div>
 
       {/* トラックリスト */}
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <ScrollArea className="min-h-0 flex-1">
         {error ? (
           <div className="flex flex-col items-center gap-2 py-6 text-center">
             <p className="text-xs text-destructive">{error}</p>
@@ -125,7 +126,7 @@ export default function ScrobbleHistory() {
             履歴がありません
           </div>
         ) : null}
-      </div>
+      </ScrollArea>
 
       {/* ページネーションバー */}
       {data && totalPages > 1 && (
