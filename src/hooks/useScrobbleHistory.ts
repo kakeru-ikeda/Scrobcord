@@ -43,22 +43,34 @@ export function useScrobbleHistory() {
       setLoading(true);
       setError(null);
     }
-    try {
-      const result = await getRecentTracks(p, HISTORY_LIMIT);
-      cache.current.set(p, result);
-      if (wantedPage.current === p) {
-        setPage(p);
-        setData(result);
-        setLoading(false);
-        setError(null);
+
+    const MAX_RETRIES = 2;
+    let lastError: unknown = null;
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      if (attempt > 0) {
+        // 一時的なエラー（Last.fm rate limit 等）はしばらく待ってリトライ
+        await new Promise<void>((resolve) => setTimeout(resolve, 2000 * attempt));
       }
-    } catch (e) {
-      if (wantedPage.current === p) {
-        setError(e instanceof Error ? e.message : String(e));
-        setLoading(false);
+      try {
+        const result = await getRecentTracks(p, HISTORY_LIMIT);
+        cache.current.set(p, result);
+        if (wantedPage.current === p) {
+          setPage(p);
+          setData(result);
+          setLoading(false);
+          setError(null);
+        }
+        inFlight.current.delete(p);
+        return;
+      } catch (e) {
+        lastError = e;
       }
-    } finally {
-      inFlight.current.delete(p);
+    }
+
+    inFlight.current.delete(p);
+    if (wantedPage.current === p) {
+      setError(lastError instanceof Error ? lastError.message : String(lastError));
+      setLoading(false);
     }
   }, [authenticated]);
 
@@ -106,14 +118,24 @@ export function useScrobbleHistory() {
   }, [authenticated]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // track-changed: page=1 のキャッシュを無効化して再取得
+  // nowplaying → null（楽曲停止）の場合は Last.fm が scrobble を処理するまで
+  // 少し待機してから再取得する（scrobble 送信と重なる rate limit 対策）
   useEffect(() => {
-    const unlisten = listen("track-changed", () => {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const unlisten = listen<{ track: unknown }>("track-changed", (event) => {
       cache.current.delete(1);
       if (wantedPage.current === 1) {
-        fetchPage(1);
+        if (timer) clearTimeout(timer);
+        const delay = event.payload.track === null ? 1500 : 0;
+        if (delay > 0) {
+          timer = setTimeout(() => fetchPage(1), delay);
+        } else {
+          fetchPage(1);
+        }
       }
     });
     return () => {
+      if (timer) clearTimeout(timer);
       unlisten.then((fn) => fn());
     };
   }, [fetchPage]);

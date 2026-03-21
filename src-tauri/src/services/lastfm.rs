@@ -59,7 +59,7 @@ impl LastfmClient {
         params.insert("method", "auth.getToken".to_string());
         let api_sig = self.sign(&params);
 
-        let resp = self
+        let body = self
             .client
             .get(API_ROOT)
             .query(&[
@@ -71,9 +71,15 @@ impl LastfmClient {
             .send()
             .await
             .map_err(|e| e.to_string())?
-            .json::<serde_json::Value>()
+            .text()
             .await
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| format!("failed to read response: {e}"))?;
+        let resp: serde_json::Value = serde_json::from_str(&body).map_err(|e| {
+            format!(
+                "Last.fm returned non-JSON ({e}): {}",
+                &body[..body.len().min(300)]
+            )
+        })?;
 
         resp["token"]
             .as_str()
@@ -91,7 +97,7 @@ impl LastfmClient {
         params.insert("token", token.to_string());
         let api_sig = self.sign(&params);
 
-        let resp = self
+        let body = self
             .client
             .get(API_ROOT)
             .query(&[
@@ -104,9 +110,15 @@ impl LastfmClient {
             .send()
             .await
             .map_err(|e| e.to_string())?
-            .json::<serde_json::Value>()
+            .text()
             .await
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| format!("failed to read response: {e}"))?;
+        let resp: serde_json::Value = serde_json::from_str(&body).map_err(|e| {
+            format!(
+                "Last.fm returned non-JSON ({e}): {}",
+                &body[..body.len().min(300)]
+            )
+        })?;
 
         // エラーレスポンス確認
         if let Some(err_msg) = resp["message"].as_str() {
@@ -132,7 +144,7 @@ impl LastfmClient {
     pub async fn get_now_playing(&self, username: &str) -> Result<Option<Track>, String> {
         debug!("lastfm: requesting recent tracks for user='{}'", username);
 
-        let resp = self
+        let body = self
             .client
             .get(API_ROOT)
             .query(&[
@@ -145,9 +157,15 @@ impl LastfmClient {
             .send()
             .await
             .map_err(|e| e.to_string())?
-            .json::<serde_json::Value>()
+            .text()
             .await
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| format!("failed to read response: {e}"))?;
+        let resp: serde_json::Value = serde_json::from_str(&body).map_err(|e| {
+            format!(
+                "Last.fm returned non-JSON ({e}): {}",
+                &body[..body.len().min(300)]
+            )
+        })?;
 
         if let Some(err_msg) = resp["message"].as_str() {
             return Err(format!("Last.fm error: {err_msg}"));
@@ -243,7 +261,7 @@ impl LastfmClient {
             username, page, limit
         );
 
-        let resp = self
+        let body = self
             .client
             .get(API_ROOT)
             .query(&[
@@ -257,9 +275,15 @@ impl LastfmClient {
             .send()
             .await
             .map_err(|e| e.to_string())?
-            .json::<serde_json::Value>()
+            .text()
             .await
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| format!("failed to read response: {e}"))?;
+        let resp: serde_json::Value = serde_json::from_str(&body).map_err(|e| {
+            format!(
+                "Last.fm returned non-JSON ({e}): {}",
+                &body[..body.len().min(300)]
+            )
+        })?;
 
         if let Some(err_msg) = resp["message"].as_str() {
             return Err(format!("Last.fm error: {err_msg}"));
