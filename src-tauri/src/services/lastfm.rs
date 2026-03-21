@@ -144,7 +144,7 @@ impl LastfmClient {
     pub async fn get_now_playing(&self, username: &str) -> Result<Option<Track>, String> {
         debug!("lastfm: requesting recent tracks for user='{}'", username);
 
-        let body = self
+        let response = self
             .client
             .get(API_ROOT)
             .query(&[
@@ -156,10 +156,18 @@ impl LastfmClient {
             ])
             .send()
             .await
-            .map_err(|e| e.to_string())?
+            .map_err(|e| e.to_string())?;
+
+        let status = response.status();
+        let body = response
             .text()
             .await
             .map_err(|e| format!("failed to read response: {e}"))?;
+
+        if status.is_server_error() || status.is_client_error() {
+            return Err(format!("transient: Last.fm HTTP {} error", status.as_u16()));
+        }
+
         let resp: serde_json::Value = serde_json::from_str(&body).map_err(|e| {
             format!(
                 "Last.fm returned non-JSON ({e}): {}",

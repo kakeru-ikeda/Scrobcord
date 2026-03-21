@@ -122,6 +122,10 @@ async fn poll_once(
 
     let now_playing = match client.get_now_playing(&username).await {
         Ok(t) => t,
+        Err(e) if e.starts_with("transient:") => {
+            warn!("polling last.fm (transient, skipping tick): {e}");
+            return;
+        }
         Err(e) => {
             error!("polling last.fm: {e}");
             return;
