@@ -26,11 +26,18 @@ export default function NowPlayingCard() {
 
   if (!track) {
     return (
-      <div className="flex items-center gap-4 px-4 py-6">
-        <div className="flex flex-1 flex-col items-center justify-center gap-2 text-muted-foreground">
-          <Music className="h-10 w-10 opacity-40" />
-          <p className="text-sm">再生中の楽曲なし</p>
+      <div className="flex items-center gap-4 p-4">
+        {/* アルバムアートプレースホルダー */}
+        <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-md bg-muted flex items-center justify-center">
+          <Music className="h-8 w-8 text-muted-foreground opacity-30" />
         </div>
+
+        {/* テキスト */}
+        <div className="flex min-w-0 flex-1 flex-col justify-center gap-1">
+          <p className="text-base font-semibold leading-tight text-muted-foreground">再生中の楽曲なし</p>
+          <p className="text-sm text-muted-foreground/50">—</p>
+        </div>
+
         <StatusDots />
       </div>
     );
