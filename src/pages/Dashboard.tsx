@@ -5,7 +5,6 @@ import NowPlayingCard from "../components/NowPlayingCard";
 import ConnectionStatus from "../components/ConnectionStatus";
 import ScrobbleHistory from "../components/ScrobbleHistory";
 import TitleBar from "../components/TitleBar";
-import { Button } from "../components/ui/button";
 import { useAppStore } from "../store/appStore";
 import { startPolling, stopPolling } from "../lib/tauriInvoke";
 
@@ -34,7 +33,35 @@ export default function Dashboard({ onNavigateSettings }: DashboardProps) {
   return (
     <div className="flex h-screen flex-col bg-background">
       {/* タイトルバー */}
-      <TitleBar>
+      <TitleBar
+        actions={
+          <>
+            <button
+              onClick={handleTogglePolling}
+              disabled={!isReady}
+              title={pollingRunning ? "停止" : "開始"}
+              className={`flex h-full w-9 items-center justify-center transition-colors ${
+                isReady && pollingRunning
+                  ? "text-red-400 hover:bg-red-500/20 hover:text-red-300"
+                  : "text-foreground/60 hover:bg-white/10 hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed"
+              }`}
+            >
+              {isReady && pollingRunning ? (
+                <Square className="h-3.5 w-3.5" />
+              ) : (
+                <Play className="h-3.5 w-3.5" />
+              )}
+            </button>
+            <button
+              onClick={onNavigateSettings}
+              title="設定"
+              className="flex h-full w-9 items-center justify-center text-foreground/60 hover:bg-white/10 hover:text-foreground transition-colors"
+            >
+              <Settings className="h-3.5 w-3.5" />
+            </button>
+          </>
+        }
+      >
         <span className="text-sm font-semibold text-foreground/80">Scrobcord</span>
         {pollingRunning && isReady && (
           <span className="ml-2 flex items-center gap-1 text-xs text-green-400">
@@ -72,33 +99,6 @@ export default function Dashboard({ onNavigateSettings }: DashboardProps) {
         <div className="shrink-0">
           <div className="mx-3 h-px bg-border" />
           <ConnectionStatus />
-
-          {/* ボタン行 */}
-          <div className="mx-3 mt-3 h-px bg-border" />
-          <div className="flex justify-center gap-4 px-4 py-3">
-            <Button
-              variant={isReady && pollingRunning ? "destructive" : "default"}
-              size="default"
-              className="w-32"
-              onClick={handleTogglePolling}
-              disabled={!isReady}
-            >
-              {isReady && pollingRunning ? (
-                <><Square className="mr-1.5 h-4 w-4" /> 停止</>
-              ) : (
-                <><Play className="mr-1.5 h-4 w-4" /> 開始</>
-              )}
-            </Button>
-            <Button
-              variant="outline"
-              size="default"
-              className="w-32"
-              onClick={onNavigateSettings}
-            >
-              <Settings className="mr-1.5 h-4 w-4" />
-              設定
-            </Button>
-          </div>
         </div>
       </div>
     </div>

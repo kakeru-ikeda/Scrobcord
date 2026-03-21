@@ -5,10 +5,11 @@ import { cn } from "../lib/utils";
 
 interface TitleBarProps {
   children?: React.ReactNode;
+  actions?: React.ReactNode;
   className?: string;
 }
 
-export default function TitleBar({ children, className }: TitleBarProps) {
+export default function TitleBar({ children, actions, className }: TitleBarProps) {
   const [isMaximized, setIsMaximized] = useState(false);
 
   useEffect(() => {
@@ -45,6 +46,16 @@ export default function TitleBar({ children, className }: TitleBarProps) {
       <div className="flex flex-1 items-center overflow-hidden px-4" data-tauri-drag-region>
         {children}
       </div>
+
+      {/* アクションボタン */}
+      {actions && (
+        <div
+          className="flex h-full shrink-0 items-center border-r border-white/10 px-1"
+          onDoubleClick={(e) => e.stopPropagation()}
+        >
+          {actions}
+        </div>
+      )}
 
       {/* ウィンドウ操作ボタン */}
       <div className="flex h-full shrink-0" onDoubleClick={(e) => e.stopPropagation()}>
