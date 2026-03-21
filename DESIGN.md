@@ -443,3 +443,299 @@ jobs:
 5. **セキュアストレージ** — `session_key` / `api_secret` は keyring（Windows: Credential Manager / macOS: Keychain / Linux: Secret Service）に保存。平文ファイルへの書き込み禁止。
 
 ---
+
+## Phase 10 — Scrobble 履歴表示
+
+### 概要
+
+Dashboard トップページに `user.getRecentTracks` API を使ったページネーション付き再生履歴を表示する。  
+認証不要エンドポイント。API key のみで呼び出し可能。
+
+---
+
+### API 仕様（`user.getRecentTracks`）
+
+```
+GET https://ws.audioscrobbler.com/2.0/
+  ?method=user.getRecentTracks
+  &user={username}
+  &api_key={api_key}
+  &page={page}        // 1-based, デフォルト 1
+  &limit={limit}      // デフォルト 50, 最大 200
+  &format=json
+```
+
+**レスポンス（JSON）**
+
+```json
+{
+  "recenttracks": {
+    "@attr": {
+      "user": "kakeru-ikeda",
+      "page": "1",
+      "perPage": "20",
+      "totalPages": "523",
+      "total": "10451"
+    },
+    "track": [
+      {
+        "@attr": { "nowplaying": "true" },
+        "name": "Pretender",
+        "artist": { "#text": "Official髭男dism" },
+        "album": { "#text": "Editorial" },
+        "image": [{ "size": "extralarge", "#text": "https://..." }],
+        "url": "https://www.last.fm/music/...",
+        "date": null
+      },
+      {
+        "name": "Subtitle",
+        "artist": { "#text": "Official髭男dism" },
+        "album": { "#text": "Editorial" },
+        "image": [{ "size": "extralarge", "#text": "https://..." }],
+        "url": "https://www.last.fm/music/...",
+        "date": { "uts": "1742600400", "#text": "21 Mar 2025, 12:00" }
+      }
+    ]
+  }
+}
+```
+
+- nowplaying トラックは `@attr.nowplaying == "true"` かつ `date` フィールドが存在しない
+- `@attr.total` が総 scrobble 数（文字列で返る）
+
+---
+
+### データモデル（Rust）
+
+**`models/track.rs` に追加**
+
+```rust
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ScrobbledTrack {
+    pub title: String,
+    pub artist: String,
+    pub album: String,
+    pub album_art_url: Option<String>,
+    pub url: Option<String>,
+    pub timestamp: Option<i64>,  // UNIX timestamp（nowplaying 時は None）
+    pub now_playing: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RecentTracksPage {
+    pub tracks: Vec<ScrobbledTrack>,
+    pub page: u32,
+    pub per_page: u32,
+    pub total_pages: u32,
+    pub total_tracks: u64,
+}
+```
+
+---
+
+### サービス層（Rust）
+
+**`services/lastfm.rs` に追加**
+
+```rust
+pub async fn get_recent_tracks(
+    &self,
+    username: &str,
+    page: u32,
+    limit: u32,
+) -> Result<RecentTracksPage, String>
+```
+
+**実装要点:**
+
+- `user.getRecentTracks` を `page` / `limit` パラメータ付きで呼び出す（署名不要）
+- `recenttracks.@attr` から `page`, `perPage`, `totalPages`, `total` を `u32` / `u64` にパース
+  - API は文字列で返すため `parse::<u32>()` / `parse::<u64>()` を使う
+- `recenttracks.track` が配列の場合と単一オブジェクトの場合を両方ハンドル  
+  （1件だけの場合 Last.fm API は配列ではなくオブジェクトを返すことがある）
+- nowplaying トラック (`@attr.nowplaying == "true"`) の `timestamp` は `None`
+- 各トラックに `now_playing` フラグを設定
+- 空レスポンス（`total == 0`）は空の `tracks` を返す
+
+---
+
+### コマンド層（Rust）
+
+**`commands/history.rs`（新規）**
+
+```rust
+#[tauri::command]
+pub async fn get_recent_tracks(
+    state: tauri::State<'_, AppState>,
+    page: u32,
+    limit: u32,
+) -> Result<RecentTracksPage, String>
+```
+
+- `AppState` から `settings.lastfm_username` を取得
+- username が空の場合は `Err("Last.fm ユーザー名が未設定です")` を返す
+- `LastfmClient::get_recent_tracks(username, page, limit)` を呼び出して返す
+
+**`commands/mod.rs`**
+
+```rust
+pub mod history;
+```
+
+**`lib.rs` の `invoke_handler` に追加**
+
+```rust
+commands::history::get_recent_tracks,
+```
+
+---
+
+### フロントエンド型定義（TypeScript）
+
+**`lib/tauriInvoke.ts` に追加**
+
+```typescript
+export interface ScrobbledTrack {
+  title: string;
+  artist: string;
+  album: string;
+  album_art_url: string | null;
+  url: string | null;
+  timestamp: number | null; // UNIX timestamp（秒）
+  now_playing: boolean;
+}
+
+export interface RecentTracksPage {
+  tracks: ScrobbledTrack[];
+  page: number;
+  per_page: number;
+  total_pages: number;
+  total_tracks: number;
+}
+
+export const getRecentTracks = (page: number, limit: number) =>
+  invoke<RecentTracksPage>("get_recent_tracks", { page, limit });
+```
+
+---
+
+### Hook（TypeScript）
+
+**`hooks/useScrobbleHistory.ts`（新規）**
+
+```typescript
+export function useScrobbleHistory(limit = 20) {
+  const [page, setPage]       = useState(1);
+  const [data, setData]       = useState<RecentTracksPage | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError]     = useState<string | null>(null);
+  const authenticated         = useAppStore(s => s.lastfmStatus.authenticated);
+
+  // ページ取得関数
+  const fetchPage = useCallback(async (p: number) => { ... }, [authenticated, limit]);
+
+  // 初回・認証状態変化時にロード
+  useEffect(() => {
+    if (authenticated) fetchPage(1);
+    else { setData(null); setPage(1); }
+  }, [authenticated]);
+
+  // track-changed イベントで page=1 の時だけ自動リフレッシュ
+  // （ポーリングが新しいscrobbleを検知→履歴最新化）
+  useEffect(() => {
+    const unlisten = listen<{ track: Track | null }>('track-changed', () => {
+      if (page === 1) fetchPage(1);
+    });
+    return () => { unlisten.then(f => f()); };
+  }, [page, fetchPage]);
+
+  return { data, loading, error, page, fetchPage };
+}
+```
+
+---
+
+### コンポーネント（TypeScript）
+
+**`components/ScrobbleHistory.tsx`（新規）**
+
+各行の表示:
+
+- 左: アルバムアート 32×32px（なければ Music アイコン）
+- 中: 曲名（`font-medium truncate`）/ アーティスト名（`text-xs text-muted-foreground truncate`）
+- 右: `now_playing` → `いま再生中` バッジ（緑）/ それ以外 → 相対時間（`dayjs().fromNow()` 相当）
+
+```
+┌─ 再生履歴 ─────────── ページ 1 / 523 ────[↻]─┐
+│ ▶ [art] Pretender          Official髭男dism  いま再生中 │
+│   [art] Subtitle           Official髭男dism    3 分前   │
+│   [art] I LOVE...          Official髭男dism    8 分前   │
+│   [art] Cry Baby           Official髭男dism   15 分前   │
+│   ...（計 20 行）                                       │
+├────────────────────────────────────────────────────────┤
+│                     [◀ 前]  1 / 523  [次 ▶]           │
+└────────────────────────────────────────────────────────┘
+```
+
+**ページネーション仕様:**
+
+- 前/次ボタン（1ページ目で「前」disabled、最終ページで「次」disabled）
+- 「X / Y ページ」テキスト表示
+- ローディング中はボタンを disabled
+- エラー時はエラーメッセージと再試行ボタンを表示
+
+---
+
+### Dashboard レイアウト変更
+
+ウィンドウサイズ: 480×640px (resizable)
+
+```
+┌─ TitleBar (32px) ──────────────────────────────┐
+├────────────────────────────────────────────────┤
+│  NowPlayingCard (shrink-0, ~130px)              │
+│  ※ 未認証/未再生時は ~48px の最小表示          │
+├────────────────────────────────────────────────┤
+│  ScrobbleHistory (flex-1 min-h-0)              │
+│  ├ ヘッダー行（タイトル + ページ情報 + ↻）     │
+│  ├ スクロール可能なトラックリスト (overflow-y-auto) │
+│  └ ページネーションバー                        │
+├────────────────────────────────────────────────┤
+│  ConnectionStatus (~48px, shrink-0)             │
+├────────────────────────────────────────────────┤
+│  Buttons (ポーリング停止 / 設定) (~56px, shrink-0) │
+└────────────────────────────────────────────────┘
+```
+
+**変更点:**
+
+- NowPlayingCard を `shrink-0` にし、ScrobbleHistory が `flex-1 min-h-0` を取る
+- ScrobbleHistory 内部のトラックリスト部分を `overflow-y-auto` でスクロール可能にする
+- `limit` はデフォルト 20（1行 ~32px × 20 = ~640px → flex-1 で収まる量に自動調整）
+
+---
+
+### 時刻フォーマット
+
+timestamp（UNIX秒）→ 相対表示のユーティリティを `src/lib/utils.ts` に追加:
+
+```typescript
+export function formatRelativeTime(unixSec: number): string {
+  const diff = Math.floor(Date.now() / 1000) - unixSec;
+  if (diff < 60) return `${diff} 秒前`;
+  if (diff < 3600) return `${Math.floor(diff / 60)} 分前`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)} 時間前`;
+  return `${Math.floor(diff / 86400)} 日前`;
+}
+```
+
+---
+
+### 追加する Tauri コマンド
+
+```rust
+// 履歴
+get_recent_tracks(page: u32, limit: u32) -> Result<RecentTracksPage, String>
+```
+
+---

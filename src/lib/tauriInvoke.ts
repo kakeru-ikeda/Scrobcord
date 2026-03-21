@@ -97,3 +97,29 @@ export const saveSettings = (settings: Settings) =>
 
 export const resetSavedData = () =>
   invoke<void>("reset_saved_data");
+
+// ---------------------------------------------------------------------------
+// Scrobble 履歴
+// ---------------------------------------------------------------------------
+
+export interface ScrobbledTrack {
+  title: string;
+  artist: string;
+  album: string;
+  album_art_url: string | null;
+  url: string | null;
+  /** UNIX 秒（nowplaying 時は null） */
+  timestamp: number | null;
+  now_playing: boolean;
+}
+
+export interface RecentTracksPage {
+  tracks: ScrobbledTrack[];
+  page: number;
+  per_page: number;
+  total_pages: number;
+  total_tracks: number;
+}
+
+export const getRecentTracks = (page: number, limit: number) =>
+  invoke<RecentTracksPage>("get_recent_tracks", { page, limit });

@@ -8,7 +8,7 @@ use tauri_plugin_store::StoreExt;
 use tokio_util::sync::CancellationToken;
 
 use crate::models::status::AuthStatus;
-use crate::services::lastfm::{LastfmClient, LastfmSession};
+use crate::services::lastfm::{LastfmSession};
 use crate::state::{AppState, AppStateInner};
 
 const KEYRING_SERVICE: &str = "scrobcord";
@@ -86,7 +86,7 @@ pub async fn lastfm_get_auth_token(
     app: AppHandle,
     state: tauri::State<'_, AppState>,
 ) -> Result<(), String> {
-    let client = LastfmClient::new();
+    let client = state.0.lock().unwrap().lastfm_client.clone();
 
     if client.api_key.is_empty() {
         return Err(
@@ -130,7 +130,9 @@ pub async fn lastfm_get_auth_token(
     let app_clone = app.clone();
     let state_arc = Arc::clone(&state.0);
     tokio::spawn(async move {
-        let client = LastfmClient::new();
+        let client = {
+            state_arc.lock().unwrap().lastfm_client.clone()
+        };
         let deadline =
             tokio::time::Instant::now() + tokio::time::Duration::from_secs(AUTH_POLL_TIMEOUT_SECS);
 
@@ -200,7 +202,7 @@ pub async fn lastfm_get_session(
         cancel.cancel();
     }
 
-    let client = LastfmClient::new();
+    let client = state.0.lock().unwrap().lastfm_client.clone();
     let session = client.get_session(&token).await?;
 
     complete_auth(&app, &state.0, session).await

@@ -3,6 +3,7 @@ import { useCallback } from "react";
 import { Settings, Square, Play } from "lucide-react";
 import NowPlayingCard from "../components/NowPlayingCard";
 import ConnectionStatus from "../components/ConnectionStatus";
+import ScrobbleHistory from "../components/ScrobbleHistory";
 import TitleBar from "../components/TitleBar";
 import { Button } from "../components/ui/button";
 import { useAppStore } from "../store/appStore";
@@ -15,7 +16,6 @@ interface DashboardProps {
 export default function Dashboard({ onNavigateSettings }: DashboardProps) {
   const pollingRunning = useAppStore((s) => s.pollingRunning);
   const lastfm = useAppStore((s) => s.lastfmStatus);
-  const discord = useAppStore((s) => s.discordStatus);
 
   const handleTogglePolling = useCallback(async () => {
     try {
@@ -47,11 +47,11 @@ export default function Dashboard({ onNavigateSettings }: DashboardProps) {
       <div className="mx-3 h-px bg-border" />
 
       {/* メインコンテンツ */}
-      <div className="flex flex-1 flex-col justify-between overflow-hidden">
+      <div className="flex flex-1 flex-col overflow-hidden">
         {/* ナウプレイングカード */}
-        <div className="flex-1">
+        <div className="shrink-0">
           {!isReady ? (
-            <div className="flex h-full flex-col items-center justify-center gap-2 p-6 text-center text-muted-foreground">
+            <div className="flex flex-col items-center justify-center gap-2 px-6 py-4 text-center text-muted-foreground">
               <p className="text-sm">Last.fm アカウントが未接続です。</p>
               <p className="text-xs opacity-70">設定から Last.fm にログインしてください。</p>
             </div>
@@ -60,14 +60,22 @@ export default function Dashboard({ onNavigateSettings }: DashboardProps) {
           )}
         </div>
 
+        {/* 再生履歴（flex-1 でスクロール可能領域） */}
+        {isReady && (
+          <>
+            <div className="mx-3 h-px shrink-0 bg-border" />
+            <ScrobbleHistory />
+          </>
+        )}
+
         {/* 接続ステータス */}
-        <div>
+        <div className="shrink-0">
           <div className="mx-3 h-px bg-border" />
           <ConnectionStatus />
 
           {/* ボタン行 */}
-          <div className="mx-3 mb-4 mt-3 h-px bg-border" />
-          <div className="flex justify-center gap-4 px-4 pb-4">
+          <div className="mx-3 mt-3 h-px bg-border" />
+          <div className="flex justify-center gap-4 px-4 py-3">
             <Button
               variant={isReady && pollingRunning ? "destructive" : "default"}
               size="default"

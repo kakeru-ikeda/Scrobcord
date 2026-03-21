@@ -151,3 +151,43 @@
 - [ ] `tauri-plugin-log` でログレベル設定（debug ビルドは DEBUG、release は INFO）
 - [ ] 全 Tauri コマンドのエラーを `String` ではなく構造化エラー型に統一（任意）
 - [ ] i18n 対応（`language` 設定に応じて ja/en 切り替え）
+
+---
+
+## Phase 10 — Scrobble 履歴表示（ページネーション）
+
+> 詳細設計は [DESIGN.md](DESIGN.md) の「Phase 10」セクションを参照。
+
+### Rust バックエンド
+
+- [x] `models/track.rs` に `ScrobbledTrack` 構造体を追加（`now_playing: bool`, `timestamp: Option<i64>`）
+- [x] `models/track.rs` に `RecentTracksPage` 構造体を追加（`tracks`, `page`, `per_page`, `total_pages`, `total_tracks`）
+- [x] `services/lastfm.rs` に `get_recent_tracks(username, page, limit)` を実装
+  - [x] `user.getRecentTracks` API 呼び出し（`page` / `limit` パラメータ付き）
+  - [x] `recenttracks.@attr` からページネーション情報（文字列→数値）をパース
+  - [x] `track` が配列/単一オブジェクト両ケースをハンドル
+  - [x] nowplaying トラックの `timestamp = None` / `now_playing = true` を正しくセット
+- [x] `commands/history.rs` を新規作成し `get_recent_tracks(page, limit)` コマンドを実装
+  - [x] `AppState` から `lastfm_username` を取得、空の場合はエラー返却
+- [x] `commands/mod.rs` に `pub mod history;` を追加
+- [x] `lib.rs` の `invoke_handler` に `commands::history::get_recent_tracks` を登録
+
+### TypeScript / React フロントエンド
+
+- [x] `lib/tauriInvoke.ts` に `ScrobbledTrack` / `RecentTracksPage` 型を追加
+- [x] `lib/tauriInvoke.ts` に `getRecentTracks(page, limit)` invoke ラッパーを追加
+- [x] `lib/utils.ts` に `formatRelativeTime(unixSec: number): string` ユーティリティを追加
+- [x] `hooks/useScrobbleHistory.ts` を新規作成
+  - [x] `fetchPage(p)` 関数の実装（ローディング / エラー状態管理）
+  - [x] `useEffect` で認証状態変化時に page=1 を自動ロード
+  - [x] `track-changed` イベント購読で page=1 時に自動リフレッシュ
+- [x] `components/ScrobbleHistory.tsx` を新規作成
+  - [x] トラック行コンポーネント（アルバムアート 32px / 曲名+アーティスト / 相対時刻）
+  - [x] nowplaying 行のバッジ表示（緑色「いま再生中」）
+  - [x] overflow-y-auto のスクロール可能リスト
+  - [x] ページネーションバー（前/次ボタン + ページ数表示）
+  - [x] ローディング中のスケルトン表示
+  - [x] エラー表示 + 再試行ボタン
+- [x] `pages/Dashboard.tsx` のレイアウト変更
+  - [x] NowPlayingCard を `shrink-0` に変更
+  - [x] `ScrobbleHistory` を `flex-1 min-h-0` で配置（NowPlayingCard の下）

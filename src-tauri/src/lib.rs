@@ -6,6 +6,7 @@ mod state;
 use models::settings::Settings;
 use models::status::{AuthStatus, DiscordStatus};
 use services::discord_rpc::DiscordRpcClient;
+use services::lastfm::LastfmClient;
 use state::{AppState, AppStateInner};
 use std::sync::{Arc, Mutex};
 use tauri::Manager;
@@ -40,6 +41,7 @@ pub fn run() {
         discord_client: Arc::new(Mutex::new(DiscordRpcClient::new(String::new()))),
         pending_auth_token: None,
         auth_poll_cancel_token: None,
+        lastfm_client: LastfmClient::new(),
     })));
 
     tauri::Builder::default()
@@ -106,6 +108,7 @@ pub fn run() {
             commands::settings::get_settings,
             commands::settings::save_settings,
             commands::settings::reset_saved_data,
+            commands::history::get_recent_tracks,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

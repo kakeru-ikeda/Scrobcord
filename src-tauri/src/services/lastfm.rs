@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use log::debug;
 
-use crate::models::track::Track;
+use crate::models::track::{RecentTracksPage, ScrobbledTrack, Track};
 
 const API_ROOT: &str = "https://ws.audioscrobbler.com/2.0/";
 
@@ -16,6 +16,7 @@ const EMBEDDED_API_SECRET: &str = match option_env!("LASTFM_API_SECRET") {
     None => "",
 };
 
+#[derive(Clone)]
 pub struct LastfmClient {
     pub api_key: String,
     api_secret: String,
@@ -226,6 +227,131 @@ impl LastfmClient {
             url,
             timestamp: None,
         }))
+    }
+
+    // -----------------------------------------------------------------------
+    // user.getRecentTracks — ページネーション付き再生履歴取得
+    // -----------------------------------------------------------------------
+    pub async fn get_recent_tracks(
+        &self,
+        username: &str,
+        page: u32,
+        limit: u32,
+    ) -> Result<RecentTracksPage, String> {
+        debug!(
+            "lastfm: get_recent_tracks user='{}' page={} limit={}",
+            username, page, limit
+        );
+
+        let resp = self
+            .client
+            .get(API_ROOT)
+            .query(&[
+                ("method", "user.getRecentTracks"),
+                ("user", username),
+                ("api_key", &self.api_key),
+                ("page", &page.to_string()),
+                ("limit", &limit.to_string()),
+                ("format", "json"),
+            ])
+            .send()
+            .await
+            .map_err(|e| e.to_string())?
+            .json::<serde_json::Value>()
+            .await
+            .map_err(|e| e.to_string())?;
+
+        if let Some(err_msg) = resp["message"].as_str() {
+            return Err(format!("Last.fm error: {err_msg}"));
+        }
+
+        let recent = &resp["recenttracks"];
+
+        // ページネーション情報（API は文字列で返す）
+        let parse_u32 = |key: &str| -> u32 {
+            recent["@attr"][key]
+                .as_str()
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(0)
+        };
+        let total_tracks: u64 = recent["@attr"]["total"]
+            .as_str()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(0);
+
+        let page_num = parse_u32("page");
+        let per_page = parse_u32("perPage");
+        let total_pages = parse_u32("totalPages");
+
+        // track は配列/単一オブジェクト両対応
+        let track_values: Vec<&serde_json::Value> = match &recent["track"] {
+            serde_json::Value::Array(arr) => arr.iter().collect(),
+            obj @ serde_json::Value::Object(_) => vec![obj],
+            _ => vec![],
+        };
+
+        let mut tracks = Vec::with_capacity(track_values.len());
+        for t in track_values {
+            let now_playing = t["@attr"]["nowplaying"]
+                .as_str()
+                .map(|s| s == "true")
+                .unwrap_or(false);
+
+            let title = t["name"].as_str().unwrap_or_default().to_string();
+            let artist = t["artist"]["#text"]
+                .as_str()
+                .unwrap_or_default()
+                .to_string();
+            let album = t["album"]["#text"].as_str().unwrap_or_default().to_string();
+
+            let album_art_url = t["image"]
+                .as_array()
+                .and_then(|imgs| {
+                    imgs.iter()
+                        .find(|img| img["size"].as_str() == Some("extralarge"))
+                        .or_else(|| imgs.last())
+                })
+                .and_then(|img| img["#text"].as_str())
+                .filter(|s| !s.is_empty())
+                .map(|s| s.to_string());
+
+            let url = t["url"]
+                .as_str()
+                .filter(|s| !s.is_empty())
+                .map(|s| s.to_string());
+
+            let timestamp: Option<i64> = if now_playing {
+                None
+            } else {
+                t["date"]["uts"].as_str().and_then(|s| s.parse().ok())
+            };
+
+            tracks.push(ScrobbledTrack {
+                title,
+                artist,
+                album,
+                album_art_url,
+                url,
+                timestamp,
+                now_playing,
+            });
+        }
+
+        debug!(
+            "lastfm: got {} tracks (page {}/{}) total={}",
+            tracks.len(),
+            page_num,
+            total_pages,
+            total_tracks
+        );
+
+        Ok(RecentTracksPage {
+            tracks,
+            page: page_num,
+            per_page,
+            total_pages,
+            total_tracks,
+        })
     }
 }
 

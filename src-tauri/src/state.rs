@@ -7,6 +7,7 @@ use crate::models::{
     track::Track,
 };
 use crate::services::discord_rpc::DiscordRpcClient;
+use crate::services::lastfm::LastfmClient;
 
 pub struct AppStateInner {
     pub settings: Settings,
@@ -22,6 +23,8 @@ pub struct AppStateInner {
     pub pending_auth_token: Option<String>,
     /// Last.fm 認証ポーリングタスクのキャンセルトークン
     pub auth_poll_cancel_token: Option<CancellationToken>,
+    /// 共有 Last.fm クライアント（reqwest コネクションプールを使い回す）
+    pub lastfm_client: LastfmClient,
 }
 
 pub struct AppState(pub Arc<Mutex<AppStateInner>>);

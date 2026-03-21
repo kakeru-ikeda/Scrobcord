@@ -26,8 +26,8 @@ pub fn start(app: AppHandle, state: Arc<Mutex<AppStateInner>>) -> CancellationTo
         // Last.fm が曲切り替えタイミングで一瞬 null を返すことがある。
         // 2回連続 null を確認してから初めてアクティビティをクリアする。
         let mut no_track_ticks: u32 = 0;
-        // reqwest::Client はコネクションプールを持つため使い回す
-        let lastfm_client = LastfmClient::new();
+        // AppState から共有クライアントを取得（reqwest コネクションプールを使い回す）
+        let lastfm_client = state.lock().unwrap_or_else(|e| e.into_inner()).lastfm_client.clone();
 
         loop {
             tokio::select! {
