@@ -2,7 +2,6 @@
 import { useCallback } from "react";
 import { Settings, Square, Play } from "lucide-react";
 import NowPlayingCard from "../components/NowPlayingCard";
-import ConnectionStatus from "../components/ConnectionStatus";
 import ScrobbleHistory from "../components/ScrobbleHistory";
 import TitleBar from "../components/TitleBar";
 import { useAppStore } from "../store/appStore";
@@ -95,11 +94,7 @@ export default function Dashboard({ onNavigateSettings }: DashboardProps) {
           </>
         )}
 
-        {/* 接続ステータス */}
-        <div className="shrink-0">
-          <div className="mx-3 h-px bg-border" />
-          <ConnectionStatus />
-        </div>
+
       </div>
     </div>
   );
