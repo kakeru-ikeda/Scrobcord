@@ -149,7 +149,7 @@
 
 - [ ] `tauri-plugin-log` でログレベル設定（debug ビルドは DEBUG、release は INFO）
 - [ ] 全 Tauri コマンドのエラーを `String` ではなく構造化エラー型に統一（任意）
-- [ ] i18n 対応（`language` 設定に応じて ja/en 切り替え）
+- [x] i18n 対応（`language` 設定に応じて ja/en 切り替え）
 
 ---
 

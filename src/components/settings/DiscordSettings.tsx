@@ -1,5 +1,6 @@
 // Phase 7 で実装
 import { ExternalLink } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Switch } from "../ui/switch";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
@@ -37,6 +38,7 @@ function SwitchRow({
 }
 
 export default function DiscordSettings({ settings, onChange }: Props) {
+  const { t } = useTranslation();
   const track = useAppStore((s) => s.nowPlaying);
 
   const previewTitle = track?.title ?? "Pretender";
@@ -48,7 +50,7 @@ export default function DiscordSettings({ settings, onChange }: Props) {
     <div className="flex flex-col gap-4">
       {/* Discord カード風プレビュー */}
       <div className="rounded-lg bg-[#1e1f22] border border-white/10 p-3">
-        <p className="text-xs text-white/40 mb-2">Discord プレビュー</p>
+        <p className="text-xs text-white/40 mb-2">{t("discord.previewTitle")}</p>
         <div className="flex gap-3 items-center">
           {/* アルバムアート */}
           {settings.rpc_show_album_art && (
@@ -66,7 +68,7 @@ export default function DiscordSettings({ settings, onChange }: Props) {
           <div className="flex flex-col justify-center gap-0.5 min-w-0">
             {settings.rpc_use_listening_type && (
               <p className="text-[11px] text-white/50 truncate">
-                {formatPreview(settings.rpc_name_format, previewTitle, previewArtist, previewAlbum) || "—"}を再生中
+                {t("discord.listening", { name: formatPreview(settings.rpc_name_format, previewTitle, previewArtist, previewAlbum) || "—" })}
               </p>
             )}
             <p className="text-sm font-semibold text-white truncate">
@@ -85,14 +87,15 @@ export default function DiscordSettings({ settings, onChange }: Props) {
         <div className="mt-2">
           <span className="inline-flex items-center gap-1 rounded bg-white/10 px-2 py-0.5 text-[11px] text-white/70">
             <ExternalLink className="h-2.5 w-2.5" />
-            Last.fmで開く
+            {t("discord.openOnLastfm")}
           </span>
         </div>
-        <p className="mt-1 text-[10px] text-white/30">※ Discord ではボタンは自分には表示されません</p>
+        <p className="mt-1 text-[10px] text-white/30">{t("discord.buttonNote")}</p>
       </div>
 
       <p className="text-xs text-muted-foreground">
-        使用可能: <code className="bg-muted px-1 rounded">{"{track}"}</code>{" "}
+        {t("discord.availablePlaceholders")}{" "}
+        <code className="bg-muted px-1 rounded">{"{track}"}</code>{" "}
         <code className="bg-muted px-1 rounded">{"{artist}"}</code>{" "}
         <code className="bg-muted px-1 rounded">{"{album}"}</code>
       </p>
@@ -101,8 +104,8 @@ export default function DiscordSettings({ settings, onChange }: Props) {
       {settings.rpc_use_listening_type && (
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="name-fmt">
-            アクティビティ名
-            <span className="ml-1.5 text-xs text-muted-foreground/70">「〇〇 を聴いています」の部分</span>
+            {t("discord.activityName")}
+            <span className="ml-1.5 text-xs text-muted-foreground/70">{t("discord.activityNameHint")}</span>
           </Label>
           <Input
             id="name-fmt"
@@ -116,8 +119,8 @@ export default function DiscordSettings({ settings, onChange }: Props) {
       {/* 1行目 Details */}
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="details-fmt">
-          1行目
-          <span className="ml-1.5 text-xs text-muted-foreground/70">太字で表示（デフォルト: 曲名）</span>
+          {t("discord.line1")}
+          <span className="ml-1.5 text-xs text-muted-foreground/70">{t("discord.line1Hint")}</span>
         </Label>
         <Input
           id="details-fmt"
@@ -130,8 +133,8 @@ export default function DiscordSettings({ settings, onChange }: Props) {
       {/* 2行目 State */}
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="state-fmt">
-          2行目
-          <span className="ml-1.5 text-xs text-muted-foreground/70">細字で表示（デフォルト: アーティスト名）</span>
+          {t("discord.line2")}
+          <span className="ml-1.5 text-xs text-muted-foreground/70">{t("discord.line2Hint")}</span>
         </Label>
         <Input
           id="state-fmt"
@@ -144,12 +147,12 @@ export default function DiscordSettings({ settings, onChange }: Props) {
       {/* Toggle 群 */}
       <div className="flex flex-col gap-3">
         <SwitchRow
-          label="音楽アクティビティ表示 (Listening)"
+          label={t("discord.listenToggle")}
           checked={settings.rpc_use_listening_type}
           onCheckedChange={(v) => onChange({ rpc_use_listening_type: v })}
         />
         <SwitchRow
-          label="アルバムアート表示"
+          label={t("discord.albumArtToggle")}
           checked={settings.rpc_show_album_art}
           onCheckedChange={(v) => onChange({ rpc_show_album_art: v })}
         />

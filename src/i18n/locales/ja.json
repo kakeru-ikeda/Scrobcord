@@ -1,0 +1,78 @@
+{
+  "dashboard": {
+    "stopTooltip": "停止",
+    "startTooltip": "開始",
+    "settingsTooltip": "設定",
+    "notConnected": "Last.fm アカウントが未接続です。",
+    "loginPrompt": "設定から Last.fm にログインしてください。"
+  },
+  "nowPlaying": {
+    "noTrack": "再生中の曲がありません",
+    "lastfmTooltipConnected": "Last.fm: 接続済 ({{username}})",
+    "lastfmTooltipConnectedNoUser": "Last.fm: 接続済",
+    "lastfmTooltipDisconnected": "Last.fm: 未接続",
+    "discordTooltipConnected": "Discord: 接続済",
+    "discordTooltipDisconnected": "Discord: 未接続",
+    "discordTooltipError": "Discord: {{error}}"
+  },
+  "connection": {
+    "connectedWithUser": "接続済 ({{username}})",
+    "connected": "接続済",
+    "notConnected": "未接続",
+    "error": "エラー: {{error}}"
+  },
+  "settings": {
+    "title": "設定",
+    "back": "← 戻る",
+    "saveFailed": "保存失敗",
+    "loading": "読み込み中...",
+    "resetConfirm": "保存済みの設定とLast.fm認証情報をリセットします。よろしいですか？",
+    "tabs": {
+      "lastfm": "Last.fm",
+      "discord": "Discord RPC",
+      "general": "一般"
+    }
+  },
+  "lastfm": {
+    "connected": "接続済",
+    "logout": "ログアウト",
+    "waitingBrowser": "ブラウザで承認するのを待っています...",
+    "cancel": "キャンセル",
+    "login": "Last.fm でログイン"
+  },
+  "discord": {
+    "previewTitle": "Discord プレビュー",
+    "listening": "{{name}}を再生中",
+    "openOnLastfm": "Last.fmで開く",
+    "buttonNote": "※ Discord ではボタンは自分には表示されません",
+    "availablePlaceholders": "使用可能:",
+    "activityName": "アクティビティ名",
+    "activityNameHint": "「〇〇 を聴いています」の部分",
+    "line1": "1行目",
+    "line1Hint": "太字で表示（デフォルト: 曲名）",
+    "line2": "2行目",
+    "line2Hint": "細字で表示（デフォルト: アーティスト名）",
+    "listenToggle": "音楽アクティビティ表示 (Listening)",
+    "albumArtToggle": "アルバムアート表示",
+    "appId": "Application ID",
+    "appIdHint": "Discord Developer Portal で作成したアプリの ID"
+  },
+  "general": {
+    "pollInterval": "ポーリング間隔",
+    "pollUnit": "{{seconds}}秒",
+    "pollMin": "5秒",
+    "pollMax": "60秒",
+    "startOnLogin": "ログイン時に起動",
+    "minimizeToTray": "ウィンドウを閉じたらトレイに格納",
+    "rpcEnabled": "Discord RPC に送信する",
+    "language": "言語 / Language",
+    "resetData": "保存情報をリセット"
+  },
+  "history": {
+    "title": "Scrobble履歴",
+    "pagination": "{{page}} / {{total}} ページ",
+    "reload": "再読み込み",
+    "retry": "再試行",
+    "empty": "履歴がありません"
+  }
+}

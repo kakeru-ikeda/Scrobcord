@@ -1,4 +1,5 @@
 // Phase 6 で実装
+import { useTranslation } from "react-i18next";
 import { useAppStore } from "../store/appStore";
 
 function Dot({ ok }: { ok: boolean }) {
@@ -12,6 +13,7 @@ function Dot({ ok }: { ok: boolean }) {
 }
 
 export default function ConnectionStatus() {
+  const { t } = useTranslation();
   const discord = useAppStore((s) => s.discordStatus);
   const lastfm = useAppStore((s) => s.lastfmStatus);
 
@@ -23,9 +25,9 @@ export default function ConnectionStatus() {
         <span className="ml-auto text-xs text-muted-foreground">
           {lastfm.authenticated
             ? lastfm.username
-              ? `接続済 (${lastfm.username})`
-              : "接続済"
-            : "未接続"}
+              ? t("connection.connectedWithUser", { username: lastfm.username })
+              : t("connection.connected")
+            : t("connection.notConnected")}
         </span>
       </div>
       <div className="flex items-center gap-2">
@@ -33,10 +35,10 @@ export default function ConnectionStatus() {
         <span className="text-muted-foreground">Discord</span>
         <span className="ml-auto text-xs text-muted-foreground">
           {discord.connected
-            ? "接続済"
+            ? t("connection.connected")
             : discord.error
-            ? `エラー: ${discord.error}`
-            : "未接続"}
+            ? t("connection.error", { error: discord.error })
+            : t("connection.notConnected")}
         </span>
       </div>
     </div>

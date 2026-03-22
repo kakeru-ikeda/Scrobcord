@@ -1,5 +1,6 @@
 // Phase 7 で実装
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import LastfmSettings from "../components/settings/LastfmSettings";
 import DiscordSettings from "../components/settings/DiscordSettings";
 import GeneralSettings from "../components/settings/GeneralSettings";
@@ -7,14 +8,9 @@ import TitleBar from "../components/TitleBar";
 import { cn } from "../lib/utils";
 import { getSettings, resetSavedData, saveSettings } from "../lib/tauriInvoke";
 import type { Settings } from "../lib/tauriInvoke";
+import { useAppStore } from "../store/appStore";
 
 type Tab = "lastfm" | "discord" | "general";
-
-const TABS: { id: Tab; label: string }[] = [
-  { id: "lastfm", label: "Last.fm" },
-  { id: "discord", label: "Discord RPC" },
-  { id: "general", label: "一般" },
-];
 
 const DEBOUNCE_MS = 600;
 
@@ -23,6 +19,15 @@ interface SettingsProps {
 }
 
 export default function Settings({ onBack }: SettingsProps) {
+  const { t } = useTranslation();
+  const setLanguage = useAppStore((s) => s.setLanguage);
+
+  const TABS: { id: Tab; label: string }[] = [
+    { id: "lastfm", label: t("settings.tabs.lastfm") },
+    { id: "discord", label: t("settings.tabs.discord") },
+    { id: "general", label: t("settings.tabs.general") },
+  ];
+
   const [tab, setTab] = useState<Tab>("lastfm");
   const [settings, setSettings] = useState<Settings | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -33,7 +38,11 @@ export default function Settings({ onBack }: SettingsProps) {
   // 初回読み込み
   useEffect(() => {
     getSettings()
-      .then(setSettings)
+      .then((s) => {
+        setSettings(s);
+        // 保存済み言語を store に反映
+        if (s.language) setLanguage(s.language);
+      })
       .catch((e) => setSaveError(String(e)));
   }, []);
 
@@ -42,6 +51,11 @@ export default function Settings({ onBack }: SettingsProps) {
     const next = { ...settings, ...patch };
     setSettings(next);
     latestSettingsRef.current = next;
+
+    // 言語変更時は即時反映
+    if (patch.language) {
+      setLanguage(patch.language);
+    }
 
     // デバウンス保存
     if (debounceTimer.current) clearTimeout(debounceTimer.current);
@@ -56,7 +70,7 @@ export default function Settings({ onBack }: SettingsProps) {
   };
 
   const handleResetSavedData = async () => {
-    if (!window.confirm("保存済みの設定とLast.fm認証情報をリセットします。よろしいですか？")) {
+    if (!window.confirm(t("settings.resetConfirm"))) {
       return;
     }
 
@@ -96,12 +110,12 @@ export default function Settings({ onBack }: SettingsProps) {
           onClick={onBack}
           className="text-xs text-muted-foreground hover:text-foreground transition-colors"
         >
-          ← 戻る
+          {t("settings.back")}
         </button>
-        <span className="ml-2 text-sm font-semibold text-foreground/80">設定</span>
+        <span className="ml-2 text-sm font-semibold text-foreground/80">{t("settings.title")}</span>
         {saveError && (
           <span className="ml-auto text-xs text-red-400 truncate max-w-[160px]" title={saveError}>
-            保存失敗
+            {t("settings.saveFailed")}
           </span>
         )}
       </TitleBar>
@@ -131,7 +145,7 @@ export default function Settings({ onBack }: SettingsProps) {
       {/* コンテンツ */}
       <div className="flex-1 overflow-y-auto px-4 py-4">
         {settings == null ? (
-          <p className="text-xs text-muted-foreground">読み込み中...</p>
+          <p className="text-xs text-muted-foreground">{t("settings.loading")}</p>
         ) : tab === "lastfm" ? (
           <LastfmSettings settings={settings} onChange={handleChange} />
         ) : tab === "discord" ? (

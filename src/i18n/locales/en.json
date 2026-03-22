@@ -1,0 +1,78 @@
+{
+  "dashboard": {
+    "stopTooltip": "Stop",
+    "startTooltip": "Start",
+    "settingsTooltip": "Settings",
+    "notConnected": "Last.fm account is not connected.",
+    "loginPrompt": "Please log in to Last.fm from Settings."
+  },
+  "nowPlaying": {
+    "noTrack": "No track playing",
+    "lastfmTooltipConnected": "Last.fm: Connected ({{username}})",
+    "lastfmTooltipConnectedNoUser": "Last.fm: Connected",
+    "lastfmTooltipDisconnected": "Last.fm: Disconnected",
+    "discordTooltipConnected": "Discord: Connected",
+    "discordTooltipDisconnected": "Discord: Disconnected",
+    "discordTooltipError": "Discord: {{error}}"
+  },
+  "connection": {
+    "connectedWithUser": "Connected ({{username}})",
+    "connected": "Connected",
+    "notConnected": "Not connected",
+    "error": "Error: {{error}}"
+  },
+  "settings": {
+    "title": "Settings",
+    "back": "← Back",
+    "saveFailed": "Save failed",
+    "loading": "Loading...",
+    "resetConfirm": "This will reset all saved settings and Last.fm credentials. Are you sure?",
+    "tabs": {
+      "lastfm": "Last.fm",
+      "discord": "Discord RPC",
+      "general": "General"
+    }
+  },
+  "lastfm": {
+    "connected": "Connected",
+    "logout": "Logout",
+    "waitingBrowser": "Waiting for browser authorization...",
+    "cancel": "Cancel",
+    "login": "Log in with Last.fm"
+  },
+  "discord": {
+    "previewTitle": "Discord Preview",
+    "listening": "Listening to {{name}}",
+    "openOnLastfm": "Open on Last.fm",
+    "buttonNote": "* Buttons are not visible to yourself in Discord",
+    "availablePlaceholders": "Available:",
+    "activityName": "Activity Name",
+    "activityNameHint": "The part shown as \"Listening to 〇〇\"",
+    "line1": "Line 1",
+    "line1Hint": "Bold text (default: track name)",
+    "line2": "Line 2",
+    "line2Hint": "Small text (default: artist name)",
+    "listenToggle": "Show as Music Activity (Listening)",
+    "albumArtToggle": "Show album art",
+    "appId": "Application ID",
+    "appIdHint": "The ID of the app created in Discord Developer Portal"
+  },
+  "general": {
+    "pollInterval": "Poll Interval",
+    "pollUnit": "{{seconds}}s",
+    "pollMin": "5s",
+    "pollMax": "60s",
+    "startOnLogin": "Start on login",
+    "minimizeToTray": "Minimize to tray on close",
+    "rpcEnabled": "Send to Discord RPC",
+    "language": "言語 / Language",
+    "resetData": "Reset saved data"
+  },
+  "history": {
+    "title": "Scrobble History",
+    "pagination": "{{page}} / {{total}} pages",
+    "reload": "Reload",
+    "retry": "Retry",
+    "empty": "No history"
+  }
+}

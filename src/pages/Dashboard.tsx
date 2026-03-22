@@ -1,6 +1,7 @@
 // Phase 6 で実装
 import { useCallback } from "react";
 import { Settings, Square, Play } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import NowPlayingCard from "../components/NowPlayingCard";
 import ScrobbleHistory from "../components/ScrobbleHistory";
 import TitleBar from "../components/TitleBar";
@@ -12,6 +13,7 @@ interface DashboardProps {
 }
 
 export default function Dashboard({ onNavigateSettings }: DashboardProps) {
+  const { t } = useTranslation();
   const pollingRunning = useAppStore((s) => s.pollingRunning);
   const lastfm = useAppStore((s) => s.lastfmStatus);
 
@@ -38,7 +40,7 @@ export default function Dashboard({ onNavigateSettings }: DashboardProps) {
             <button
               onClick={handleTogglePolling}
               disabled={!isReady}
-              title={pollingRunning ? "停止" : "開始"}
+              title={pollingRunning ? t("dashboard.stopTooltip") : t("dashboard.startTooltip")}
               className={`flex h-full w-9 items-center justify-center transition-colors ${
                 isReady && pollingRunning
                   ? "text-red-400 hover:bg-red-500/20 hover:text-red-300"
@@ -53,7 +55,7 @@ export default function Dashboard({ onNavigateSettings }: DashboardProps) {
             </button>
             <button
               onClick={onNavigateSettings}
-              title="設定"
+              title={t("dashboard.settingsTooltip")}
               className="flex h-full w-9 items-center justify-center text-foreground/60 hover:bg-white/10 hover:text-foreground transition-colors"
             >
               <Settings className="h-3.5 w-3.5" />
@@ -78,8 +80,8 @@ export default function Dashboard({ onNavigateSettings }: DashboardProps) {
         <div className="shrink-0">
           {!isReady ? (
             <div className="flex flex-col items-center justify-center gap-2 px-6 py-4 text-center text-muted-foreground">
-              <p className="text-sm">Last.fm アカウントが未接続です。</p>
-              <p className="text-xs opacity-70">設定から Last.fm にログインしてください。</p>
+              <p className="text-sm">{t("dashboard.notConnected")}</p>
+              <p className="text-xs opacity-70">{t("dashboard.loginPrompt")}</p>
             </div>
           ) : (
             <NowPlayingCard />

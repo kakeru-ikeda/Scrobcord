@@ -1,4 +1,5 @@
 // Phase 7 で実装
+import { useTranslation } from "react-i18next";
 import { Switch } from "../ui/switch";
 import { Slider } from "../ui/slider";
 import { Label } from "../ui/label";
@@ -29,14 +30,16 @@ function SwitchRow({
 }
 
 export default function GeneralSettings({ settings, onChange, onResetSavedData }: Props) {
+  const { t } = useTranslation();
+
   return (
     <div className="flex flex-col gap-4">
       {/* ポーリング間隔 */}
       <div className="flex flex-col gap-2">
         <div className="flex items-center justify-between">
-          <Label>ポーリング間隔</Label>
+          <Label>{t("general.pollInterval")}</Label>
           <span className="text-xs font-medium text-foreground">
-            {settings.poll_interval_secs}秒
+            {t("general.pollUnit", { seconds: settings.poll_interval_secs })}
           </span>
         </div>
         <Slider
@@ -47,25 +50,25 @@ export default function GeneralSettings({ settings, onChange, onResetSavedData }
           onValueChange={(v) => onChange({ poll_interval_secs: v })}
         />
         <div className="flex justify-between text-xs text-muted-foreground/60">
-          <span>5秒</span>
-          <span>60秒</span>
+          <span>{t("general.pollMin")}</span>
+          <span>{t("general.pollMax")}</span>
         </div>
       </div>
 
       {/* Toggle 群 */}
       <div className="flex flex-col gap-3">
         <SwitchRow
-          label="ログイン時に起動"
+          label={t("general.startOnLogin")}
           checked={settings.start_on_login}
           onCheckedChange={(v) => onChange({ start_on_login: v })}
         />
         <SwitchRow
-          label="ウィンドウを閉じたらトレイに格納"
+          label={t("general.minimizeToTray")}
           checked={settings.minimize_to_tray}
           onCheckedChange={(v) => onChange({ minimize_to_tray: v })}
         />
         <SwitchRow
-          label="Discord RPC に送信する"
+          label={t("general.rpcEnabled")}
           checked={settings.rpc_enabled}
           onCheckedChange={(v) => onChange({ rpc_enabled: v })}
         />
@@ -73,7 +76,7 @@ export default function GeneralSettings({ settings, onChange, onResetSavedData }
 
       {/* 言語選択 */}
       <div className="flex items-center justify-between">
-        <Label>言語 / Language</Label>
+        <Label>{t("general.language")}</Label>
         <select
           value={settings.language}
           onChange={(e) => onChange({ language: e.target.value })}
@@ -91,7 +94,7 @@ export default function GeneralSettings({ settings, onChange, onResetSavedData }
           className="w-full"
           onClick={onResetSavedData}
         >
-          保存情報をリセット
+          {t("general.resetData")}
         </Button>
       </div>
     </div>

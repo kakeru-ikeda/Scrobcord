@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import { ExternalLink, LogOut, CheckCircle, Loader2, X } from "lucide-react";
 import { listen } from "@tauri-apps/api/event";
+import { useTranslation } from "react-i18next";
 import { Button } from "../ui/button";
 import {
   lastfmGetAuthToken,
@@ -18,6 +19,7 @@ interface Props {
 }
 
 export default function LastfmSettings({ settings: _settings, onChange: _onChange }: Props) {
+  const { t } = useTranslation();
   const lastfmStatus = useAppStore((s) => s.lastfmStatus);
   const setLastfmStatus = useAppStore((s) => s.setLastfmStatus);
 
@@ -93,7 +95,7 @@ export default function LastfmSettings({ settings: _settings, onChange: _onChang
         <div className="flex items-center justify-between rounded-md bg-green-500/10 px-3 py-2">
           <div className="flex items-center gap-2 text-sm text-green-400">
             <CheckCircle className="h-4 w-4" />
-            <span>{lastfmStatus.username ?? "接続済"}</span>
+            <span>{lastfmStatus.username ?? t("lastfm.connected")}</span>
           </div>
           <Button
             variant="ghost"
@@ -102,7 +104,7 @@ export default function LastfmSettings({ settings: _settings, onChange: _onChang
             disabled={pending === "logout"}
           >
             <LogOut className="mr-1 h-3 w-3" />
-            ログアウト
+            {t("lastfm.logout")}
           </Button>
         </div>
       ) : (
@@ -112,7 +114,7 @@ export default function LastfmSettings({ settings: _settings, onChange: _onChang
             <div className="flex flex-col gap-2">
               <div className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm text-muted-foreground">
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                <span>ブラウザで承認するのを待っています...</span>
+                <span>{t("lastfm.waitingBrowser")}</span>
               </div>
               <Button
                 variant="ghost"
@@ -121,7 +123,7 @@ export default function LastfmSettings({ settings: _settings, onChange: _onChang
                 className="w-full text-muted-foreground"
               >
                 <X className="mr-1.5 h-3.5 w-3.5" />
-                キャンセル
+                {t("lastfm.cancel")}
               </Button>
             </div>
           ) : (
@@ -133,7 +135,7 @@ export default function LastfmSettings({ settings: _settings, onChange: _onChang
               className="w-full"
             >
               <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
-              Last.fm でログイン
+              {t("lastfm.login")}
             </Button>
           )}
         </div>

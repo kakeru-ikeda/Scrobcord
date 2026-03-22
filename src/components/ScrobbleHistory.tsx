@@ -1,4 +1,5 @@
 import { Music, ChevronLeft, ChevronRight, RotateCcw } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Button } from "./ui/button";
 import { ScrollArea } from "./ui/scroll-area";
 import { useScrobbleHistory } from "../hooks/useScrobbleHistory";
@@ -72,6 +73,7 @@ function SkeletonRow() {
 }
 
 export default function ScrobbleHistory() {
+  const { t } = useTranslation();
   const authenticated = useAppStore((s) => s.lastfmStatus.authenticated);
   const { data, loading, error, page, fetchPage } = useScrobbleHistory();
 
@@ -87,18 +89,18 @@ export default function ScrobbleHistory() {
     <div className="flex min-h-0 flex-1 flex-col">
       {/* ヘッダー */}
       <div className="flex shrink-0 items-center justify-between px-3 py-1.5">
-        <span className="text-xs font-semibold text-foreground/70">再生履歴</span>
+        <span className="text-xs font-semibold text-foreground/70">{t("history.title")}</span>
         <div className="flex items-center gap-1.5">
           {data && (
             <span className="text-[10px] text-muted-foreground">
-              {page} / {totalPages} ページ
+              {t("history.pagination", { page, total: totalPages })}
             </span>
           )}
           <button
             onClick={() => fetchPage(page)}
             disabled={loading}
             className="rounded p-0.5 text-muted-foreground transition-colors hover:text-foreground disabled:opacity-40"
-            title="再読み込み"
+            title={t("history.reload")}
           >
             <RotateCcw className="h-3 w-3" />
           </button>
@@ -111,7 +113,7 @@ export default function ScrobbleHistory() {
           <div className="flex flex-col items-center gap-2 py-6 text-center">
             <p className="text-xs text-destructive">{error}</p>
             <Button variant="outline" size="sm" onClick={() => fetchPage(page)}>
-              再試行
+              {t("history.retry")}
             </Button>
           </div>
         ) : loading && !data ? (
@@ -123,7 +125,7 @@ export default function ScrobbleHistory() {
           ))
         ) : data && data.tracks.length === 0 ? (
           <div className="flex items-center justify-center py-6 text-xs text-muted-foreground">
-            履歴がありません
+            {t("history.empty")}
           </div>
         ) : null}
       </ScrollArea>
