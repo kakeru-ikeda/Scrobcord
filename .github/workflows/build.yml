@@ -1,0 +1,134 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: ubuntu-22.04
+          - platform: windows-latest
+          - platform: macos-latest
+
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "npm"
+
+      - name: Install Rust (stable)
+        uses: dtolnay/rust-toolchain@stable
+
+      - uses: swatinem/rust-cache@v2
+
+      # Linux: WebKitGTK 等のシステム依存ライブラリ
+      - name: Install Linux dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt update
+          sudo apt install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf
+
+      # Windows: 自己署名証明書を生成し、Tauri override config に書き出す
+      - name: Create self-signed certificate (Windows)
+        if: matrix.platform == 'windows-latest'
+        shell: pwsh
+        run: |
+          $cert = New-SelfSignedCertificate `
+            -Subject "CN=Scrobcord" `
+            -CertStoreLocation "Cert:\CurrentUser\My" `
+            -KeyExportPolicy Exportable `
+            -KeySpec Signature `
+            -KeyLength 2048 `
+            -KeyAlgorithm RSA `
+            -HashAlgorithm SHA256 `
+            -Type CodeSigning
+
+          Write-Host "Certificate thumbprint: $($cert.Thumbprint)"
+
+          # サムプリントを含む Tauri override config を生成
+          $config = "{`"bundle`":{`"windows`":{`"certificateThumbprint`":`"$($cert.Thumbprint)`"}}}"
+
+          # BOM なし UTF-8 で書き出す（BOM があると Tauri の JSON パースが失敗する）
+          $utf8NoBom = New-Object System.Text.UTF8Encoding $false
+          [System.IO.File]::WriteAllText("$PWD\win-sign-override.json", $config, $utf8NoBom)
+
+          echo "TAURI_ARGS=--config win-sign-override.json" >> $env:GITHUB_ENV
+
+      # タグ push 時: package.json / tauri.conf.json / Cargo.toml のバージョンをタグに合わせて更新
+      - name: Update version from tag
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: node {0}
+        env:
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          const fs = require('fs');
+          const version = process.env.TAG_NAME.replace(/^v/, '');
+
+          // MSI は pre-release 識別子が数値のみという制約があるため、
+          // tauri.conf.json / Cargo.toml には数値のみのバージョン (x.y.z) を書く。
+          // package.json はフルバージョンをそのまま使う。
+          const bundleVersion = version.replace(/-.*$/, '');
+
+          const pkg = JSON.parse(fs.readFileSync('package.json', 'utf-8'));
+          pkg.version = version;
+          fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+
+          const conf = JSON.parse(fs.readFileSync('src-tauri/tauri.conf.json', 'utf-8'));
+          conf.version = bundleVersion;
+          fs.writeFileSync('src-tauri/tauri.conf.json', JSON.stringify(conf, null, 2) + '\n');
+
+          // Cargo.toml の [package] version のみ更新（依存クレートの version は変更しない）
+          let cargo = fs.readFileSync('src-tauri/Cargo.toml', 'utf-8');
+          cargo = cargo.replace(/^version = "[^"]*"/m, `version = "${bundleVersion}"`);
+          fs.writeFileSync('src-tauri/Cargo.toml', cargo);
+
+          console.log(`Tag version: ${version}  /  Bundle version: ${bundleVersion}`);
+
+      - name: Install frontend dependencies
+        run: npm install
+
+      # タグ push 時: ビルド + GitHub Release へ成果物をアップロード
+      - name: Build and upload release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          LASTFM_API_KEY: ${{ secrets.LASTFM_API_KEY }}
+          LASTFM_API_SECRET: ${{ secrets.LASTFM_API_SECRET }}
+          DISCORD_APP_ID: ${{ secrets.DISCORD_APP_ID }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: Scrobcord ${{ github.ref_name }}
+          releaseBody: |
+            See the assets below to download and install this version.
+          releaseDraft: true
+          args: ${{ env.TAURI_ARGS && format('{0} --bundles nsis,dmg,deb', env.TAURI_ARGS) || '--bundles nsis,dmg,deb' }}
+
+      # PR / 手動実行時: ビルド確認のみ（Release へのアップロードなし）
+      - name: Build only
+        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          LASTFM_API_KEY: ${{ secrets.LASTFM_API_KEY }}
+          LASTFM_API_SECRET: ${{ secrets.LASTFM_API_SECRET }}
+          DISCORD_APP_ID: ${{ secrets.DISCORD_APP_ID }}
+        with:
+          args: ${{ env.TAURI_ARGS && format('{0} --bundles nsis,dmg,deb', env.TAURI_ARGS) || '--bundles nsis,dmg,deb' }}

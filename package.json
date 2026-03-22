@@ -1,13 +1,14 @@
 {
   "name": "scrobcord",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.0.1",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "release": "node -e \"const v=process.argv[1]; if(!v)throw new Error('Usage: npm run release v1.2.3'); const tag=v.startsWith('v')?v:'v'+v; require('child_process').execSync('git tag '+tag+' && git push origin '+tag,{stdio:'inherit'});\" --"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",
