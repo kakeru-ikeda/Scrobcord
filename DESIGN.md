@@ -739,3 +739,82 @@ get_recent_tracks(page: u32, limit: u32) -> Result<RecentTracksPage, String>
 ```
 
 ---
+
+## Phase 11 — オンラインアップデート確認
+
+### 概要
+
+アプリ起動時に GitHub Releases API を呼び出して最新バージョンを確認し、新バージョンがあれば Dashboard に通知バナーを表示する。  
+**自動インストールは行わない**（署名インフラ不要）。ユーザーがバナーのボタンをクリックするとリリースページをブラウザで開く。
+
+---
+
+### フロー
+
+```
+[アプリ起動]
+       │
+       ▼
+[Rust] GET https://api.github.com/repos/kakeru-ikeda/Scrobcord/releases/latest
+       User-Agent: Scrobcord/{version}
+       │
+       ├── 404 (リリース未公開) → available: false で返却
+       ├── ネットワークエラー   → Err(String) → フロントエンドで握りつぶし
+       └── 200 OK
+             │
+             ▼
+            tag_name の v プレフィックスを除去 → semver 比較
+             │
+             ├── current >= latest → available: false で返却
+             └── current <  latest → available: true, release_url で返却
+                         │
+                         ▼
+            [フロントエンド] UpdateBanner を表示
+                         │
+                         ├── [ダウンロードページへ] → open_release_url → ブラウザで開く
+                         └── [✕] → バナー非表示（セッション中のみ）
+```
+
+---
+
+### Rust コマンド
+
+**`commands/updater.rs`**
+
+```rust
+pub struct UpdateInfo {
+    pub available: bool,
+    pub latest_version: String,
+    pub current_version: String,  // env!("CARGO_PKG_VERSION")
+    pub release_url: String,
+}
+
+// GitHub API でアップデートを確認（ネットワークエラー時は available: false）
+check_for_updates() -> Result<UpdateInfo, String>
+
+// GitHub ドメインのみ許可して URL をブラウザで開く（SSRF 対策）
+open_release_url(url: String) -> Result<(), String>
+```
+
+**セマンティックバージョン比較:**  
+プレリリースサフィックス（例: `"0.2.0-beta"`）は数値部分のみで比較。`(major, minor, patch)` のタプル大小比較。
+
+---
+
+### フロントエンド
+
+| ファイル                      | 役割                                                                        |
+| ----------------------------- | --------------------------------------------------------------------------- |
+| `lib/tauriInvoke.ts`          | `UpdateInfo` 型・`checkForUpdates()` / `openReleaseUrl(url)` ラッパー       |
+| `hooks/useUpdateCheck.ts`     | マウント時に `checkForUpdates()` を呼び、dismiss 状態を管理                 |
+| `components/UpdateBanner.tsx` | アップデートバナー UI（バージョン表示 + ダウンロードボタン + 閉じるボタン） |
+| `pages/Dashboard.tsx`         | タイトルバー直下に `UpdateBanner` を条件表示                                |
+
+---
+
+### 追加する Tauri コマンド
+
+```rust
+check_for_updates() -> Result<UpdateInfo, String>
+open_release_url(url: String) -> Result<(), String>
+```

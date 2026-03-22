@@ -1,10 +1,15 @@
 // Phase 7 で実装
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { getVersion } from "@tauri-apps/api/app";
+import { RefreshCw, ExternalLink } from "lucide-react";
 import { Switch } from "../ui/switch";
 import { Slider } from "../ui/slider";
 import { Label } from "../ui/label";
 import { Button } from "../ui/button";
-import type { Settings } from "../../lib/tauriInvoke";
+import { Badge } from "../ui/badge";
+import { checkForUpdates, openReleaseUrl } from "../../lib/tauriInvoke";
+import type { Settings, UpdateInfo } from "../../lib/tauriInvoke";
 
 interface Props {
   settings: Settings;
@@ -31,6 +36,37 @@ function SwitchRow({
 
 export default function GeneralSettings({ settings, onChange, onResetSavedData }: Props) {
   const { t } = useTranslation();
+
+  const [currentVersion, setCurrentVersion] = useState<string | null>(null);
+  const [checking, setChecking] = useState(false);
+  const [updateResult, setUpdateResult] = useState<UpdateInfo | null>(null);
+  const [checkError, setCheckError] = useState<string | null>(null);
+
+  useEffect(() => {
+    getVersion().then(setCurrentVersion).catch(() => setCurrentVersion(null));
+  }, []);
+
+  const handleCheckUpdate = async () => {
+    setChecking(true);
+    setUpdateResult(null);
+    setCheckError(null);
+    try {
+      const info = await checkForUpdates();
+      setUpdateResult(info);
+    } catch (e) {
+      setCheckError(String(e));
+    } finally {
+      setChecking(false);
+    }
+  };
+
+  const handleOpenRelease = async (url: string) => {
+    try {
+      await openReleaseUrl(url);
+    } catch (e) {
+      console.error(e);
+    }
+  };
 
   return (
     <div className="flex flex-col gap-4">
@@ -85,6 +121,61 @@ export default function GeneralSettings({ settings, onChange, onResetSavedData }
           <option value="ja">日本語</option>
           <option value="en">English</option>
         </select>
+      </div>
+
+      {/* バージョン + アップデート確認 */}
+      <div className="rounded-md border border-border bg-muted/40 p-3 flex flex-col gap-2">
+        <div className="flex items-center justify-between">
+          <Label className="text-xs text-muted-foreground">{t("general.version")}</Label>
+          <span className="text-xs font-mono text-foreground/80">
+            {currentVersion ?? "..."}
+          </span>
+        </div>
+
+        <Button
+          variant="outline"
+          size="sm"
+          className="w-full"
+          disabled={checking}
+          onClick={handleCheckUpdate}
+        >
+          <RefreshCw
+            className={`mr-1.5 h-3 w-3 ${checking ? "animate-spin" : ""}`}
+          />
+          {checking ? t("general.checking") : t("general.checkUpdate")}
+        </Button>
+
+        {/* 確認結果 */}
+        {updateResult && (
+          <div className="flex flex-col gap-1.5">
+            {updateResult.available ? (
+              <>
+                <div className="flex items-center justify-between">
+                  <Badge variant="warning">
+                    {t("general.updateAvailable", { version: updateResult.latest_version })}
+                  </Badge>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full text-blue-400 border-blue-500/40 hover:bg-blue-500/10"
+                  onClick={() => handleOpenRelease(updateResult.release_url)}
+                >
+                  <ExternalLink className="mr-1.5 h-3 w-3" />
+                  {t("update.openReleasePage")}
+                </Button>
+              </>
+            ) : (
+              <Badge variant="success" className="self-center">
+                {t("general.upToDate")}
+              </Badge>
+            )}
+          </div>
+        )}
+
+        {checkError && (
+          <p className="text-xs text-red-400 text-center">{checkError}</p>
+        )}
       </div>
 
       <div className="pt-2">

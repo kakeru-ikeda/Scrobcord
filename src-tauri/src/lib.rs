@@ -109,6 +109,8 @@ pub fn run() {
             commands::settings::save_settings,
             commands::settings::reset_saved_data,
             commands::history::get_recent_tracks,
+            commands::updater::check_for_updates,
+            commands::updater::open_release_url,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

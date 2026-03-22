@@ -5,8 +5,10 @@ import { useTranslation } from "react-i18next";
 import NowPlayingCard from "../components/NowPlayingCard";
 import ScrobbleHistory from "../components/ScrobbleHistory";
 import TitleBar from "../components/TitleBar";
+import UpdateBanner from "../components/UpdateBanner";
 import { useAppStore } from "../store/appStore";
 import { startPolling, stopPolling } from "../lib/tauriInvoke";
+import { useUpdateCheck } from "../hooks/useUpdateCheck";
 
 interface DashboardProps {
   onNavigateSettings: () => void;
@@ -30,6 +32,7 @@ export default function Dashboard({ onNavigateSettings }: DashboardProps) {
   }, [pollingRunning]);
 
   const isReady = lastfm.authenticated;
+  const { updateInfo, dismiss: dismissUpdate } = useUpdateCheck();
 
   return (
     <div className="flex h-screen flex-col bg-background">
@@ -73,6 +76,11 @@ export default function Dashboard({ onNavigateSettings }: DashboardProps) {
       </TitleBar>
 
       <div className="mx-3 h-px bg-border" />
+
+      {/* アップデート通知バナー */}
+      {updateInfo?.available && (
+        <UpdateBanner updateInfo={updateInfo} onDismiss={dismissUpdate} />
+      )}
 
       {/* メインコンテンツ */}
       <div className="flex flex-1 flex-col overflow-hidden">

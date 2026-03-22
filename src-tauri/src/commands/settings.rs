@@ -199,6 +199,7 @@ mod tests {
         let original = Settings {
             lastfm_username: "user123".to_string(),
             discord_app_id: "123456789".to_string(),
+            rpc_enabled: true,
             rpc_details_format: "{track}".to_string(),
             rpc_state_format: "{artist}".to_string(),
             rpc_name_format: "{track}".to_string(),

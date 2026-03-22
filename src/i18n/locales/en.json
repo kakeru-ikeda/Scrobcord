@@ -66,7 +66,12 @@
     "minimizeToTray": "Minimize to tray on close",
     "rpcEnabled": "Send to Discord RPC",
     "language": "言語 / Language",
-    "resetData": "Reset saved data"
+    "resetData": "Reset saved data",
+    "version": "Version",
+    "checkUpdate": "Check for Updates",
+    "checking": "Checking...",
+    "upToDate": "You're up to date",
+    "updateAvailable": "v{{version}} available"
   },
   "history": {
     "title": "Scrobble History",
@@ -74,5 +79,10 @@
     "reload": "Reload",
     "retry": "Retry",
     "empty": "No history"
+  },
+  "update": {
+    "available": "New version {{version}} is available",
+    "openReleasePage": "Download",
+    "dismiss": "Dismiss"
   }
 }

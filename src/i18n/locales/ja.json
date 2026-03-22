@@ -66,7 +66,12 @@
     "minimizeToTray": "ウィンドウを閉じたらトレイに格納",
     "rpcEnabled": "Discord RPC に送信する",
     "language": "言語 / Language",
-    "resetData": "保存情報をリセット"
+    "resetData": "保存情報をリセット",
+    "version": "バージョン",
+    "checkUpdate": "アップデートを確認",
+    "checking": "確認中...",
+    "upToDate": "最新バージョンです",
+    "updateAvailable": "v{{version}} が利用可能"
   },
   "history": {
     "title": "Scrobble履歴",
@@ -74,5 +79,10 @@
     "reload": "再読み込み",
     "retry": "再試行",
     "empty": "履歴がありません"
+  },
+  "update": {
+    "available": "新しいバージョン {{version}} が利用可能です",
+    "openReleasePage": "ダウンロードページへ",
+    "dismiss": "閉じる"
   }
 }

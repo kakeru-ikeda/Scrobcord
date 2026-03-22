@@ -190,3 +190,30 @@
 - [x] `pages/Dashboard.tsx` のレイアウト変更
   - [x] NowPlayingCard を `shrink-0` に変更
   - [x] `ScrobbleHistory` を `flex-1 min-h-0` で配置（NowPlayingCard の下）
+
+---
+
+## Phase 11 — オンラインアップデート確認
+
+> 詳細設計は [DESIGN.md](DESIGN.md) の「Phase 11」セクションを参照。
+
+### Rust バックエンド
+
+- [x] `commands/updater.rs` を新規作成
+  - [x] `UpdateInfo` 構造体（`available`, `latest_version`, `current_version`, `release_url`）
+  - [x] `check_for_updates()` — GitHub Releases API 呼び出し・semver 比較
+  - [x] `open_release_url(url)` — GitHub ドメイン検証後にブラウザで開く（SSRF 対策）
+  - [x] `is_newer_version()` の単体テスト
+- [x] `commands/mod.rs` に `pub mod updater;` を追加
+- [x] `lib.rs` の `invoke_handler` に `check_for_updates` / `open_release_url` を登録
+
+### TypeScript / React フロントエンド
+
+- [x] `lib/tauriInvoke.ts` に `UpdateInfo` 型・`checkForUpdates()` / `openReleaseUrl()` ラッパーを追加
+- [x] `hooks/useUpdateCheck.ts` を新規作成
+  - [x] マウント時に `checkForUpdates()` を呼び出し
+  - [x] dismiss 状態をローカル state で管理
+- [x] `components/UpdateBanner.tsx` を新規作成
+  - [x] バージョン表示・「ダウンロードページへ」ボタン・閉じるボタン
+- [x] `pages/Dashboard.tsx` のタイトルバー直下に `UpdateBanner` を条件表示
+- [x] i18n キー追加（`update.available` / `update.openReleasePage` / `update.dismiss`）

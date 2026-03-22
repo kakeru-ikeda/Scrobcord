@@ -124,3 +124,24 @@ export interface RecentTracksPage {
 
 export const getRecentTracks = (page: number, limit: number) =>
   invoke<RecentTracksPage>("get_recent_tracks", { page, limit });
+
+// ---------------------------------------------------------------------------
+// アップデート確認
+// ---------------------------------------------------------------------------
+
+export interface UpdateInfo {
+  /** 新しいバージョンが利用可能か */
+  available: boolean;
+  /** GitHub Releases の最新バージョン文字列（例: "0.2.0"） */
+  latest_version: string;
+  /** 現在インストールされているバージョン */
+  current_version: string;
+  /** GitHub Releases ページの URL */
+  release_url: string;
+}
+
+export const checkForUpdates = () =>
+  invoke<UpdateInfo>("check_for_updates");
+
+export const openReleaseUrl = (url: string) =>
+  invoke<void>("open_release_url", { url });
