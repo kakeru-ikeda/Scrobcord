@@ -16,8 +16,11 @@ jobs:
       matrix:
         include:
           - platform: ubuntu-22.04
+            bundles: deb
           - platform: windows-latest
+            bundles: nsis
           - platform: macos-latest
+            bundles: dmg
 
     runs-on: ${{ matrix.platform }}
 
@@ -119,7 +122,7 @@ jobs:
           releaseBody: |
             See the assets below to download and install this version.
           releaseDraft: true
-          args: ${{ env.TAURI_ARGS && format('{0} --bundles nsis,dmg,deb', env.TAURI_ARGS) || '--bundles nsis,dmg,deb' }}
+          args: ${{ env.TAURI_ARGS && format('{0} --bundles {1}', env.TAURI_ARGS, matrix.bundles) || format('--bundles {0}', matrix.bundles) }}
 
       # PR / 手動実行時: ビルド確認のみ（Release へのアップロードなし）
       - name: Build only
@@ -131,4 +134,4 @@ jobs:
           LASTFM_API_SECRET: ${{ secrets.LASTFM_API_SECRET }}
           DISCORD_APP_ID: ${{ secrets.DISCORD_APP_ID }}
         with:
-          args: ${{ env.TAURI_ARGS && format('{0} --bundles nsis,dmg,deb', env.TAURI_ARGS) || '--bundles nsis,dmg,deb' }}
+          args: ${{ env.TAURI_ARGS && format('{0} --bundles {1}', env.TAURI_ARGS, matrix.bundles) || format('--bundles {0}', matrix.bundles) }}
