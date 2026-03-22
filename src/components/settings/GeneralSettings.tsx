@@ -64,6 +64,11 @@ export default function GeneralSettings({ settings, onChange, onResetSavedData }
           checked={settings.minimize_to_tray}
           onCheckedChange={(v) => onChange({ minimize_to_tray: v })}
         />
+        <SwitchRow
+          label="Discord RPC に送信する"
+          checked={settings.rpc_enabled}
+          onCheckedChange={(v) => onChange({ rpc_enabled: v })}
+        />
       </div>
 
       {/* 言語選択 */}

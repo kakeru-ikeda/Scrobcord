@@ -8,6 +8,7 @@ pub struct Settings {
 
     // Discord RPC
     pub discord_app_id: String,
+    pub rpc_enabled: bool,
     pub rpc_details_format: String,
     pub rpc_state_format: String,
     pub rpc_name_format: String,
@@ -26,6 +27,7 @@ impl Default for Settings {
         Self {
             lastfm_username: String::new(),
             discord_app_id: String::new(),
+            rpc_enabled: true,
             rpc_details_format: "{track}".to_string(),
             rpc_state_format: "{artist}".to_string(),
             rpc_name_format: "{track}".to_string(),

@@ -177,20 +177,24 @@ async fn poll_once(
             .settings
             .clone()
     };
-    let state2 = Arc::clone(state);
-    let app2 = app.clone();
-    let track_owned = now_playing.clone();
-    tokio::task::spawn_blocking(move || {
-        update_discord(
-            &app2,
-            &state2,
-            &settings,
-            track_owned.as_ref(),
-            track_changed,
-        );
-    })
-    .await
-    .unwrap_or_else(|e| warn!("update_discord spawn_blocking failed: {:?}", e));
+    if settings.rpc_enabled {
+        let state2 = Arc::clone(state);
+        let app2 = app.clone();
+        let track_owned = now_playing.clone();
+        tokio::task::spawn_blocking(move || {
+            update_discord(
+                &app2,
+                &state2,
+                &settings,
+                track_owned.as_ref(),
+                track_changed,
+            );
+        })
+        .await
+        .unwrap_or_else(|e| warn!("update_discord spawn_blocking failed: {:?}", e));
+    } else {
+        debug!("polling: rpc_enabled=false, skipping Discord RPC update");
+    }
 }
 
 /// Discord RPC の状態を更新する
@@ -286,7 +290,37 @@ fn is_same_track(a: Option<&Track>, b: Option<&Track>) -> bool {
 
 /// 設定変更後など、トラック変化を待たずに Discord アクティビティをすぐ更新したいときに呼ぶ。
 /// AppStateInner から最新のトラックを取得して `update_discord` を強制実行する。
+/// `rpc_enabled = false` の場合はアクティビティをクリアして切断し、状態イベントを emit する。
 pub fn refresh_discord(app: &AppHandle, state: &Arc<Mutex<AppStateInner>>, settings: &Settings) {
+    if !settings.rpc_enabled {
+        // RPC が無効化された場合はアクティビティをクリアして切断する
+        let discord_client = {
+            let inner = state.lock().unwrap_or_else(|e| e.into_inner());
+            Arc::clone(&inner.discord_client)
+        };
+        let mut client = discord_client.lock().unwrap_or_else(|e| e.into_inner());
+        if client.is_connected() {
+            if let Err(e) = client.clear_activity() {
+                warn!("refresh_discord: clear_activity on rpc_enabled=false: {e}");
+            }
+            client.disconnect();
+        }
+        drop(client);
+
+        use crate::models::status::DiscordStatus;
+        let status = DiscordStatus {
+            connected: false,
+            error: None,
+        };
+        state
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .discord_status = status.clone();
+        app.emit("discord-status-changed", &status)
+            .unwrap_or_else(|e| warn!("emit discord-status-changed: {e}"));
+        return;
+    }
+
     let now_playing = {
         state
             .lock()

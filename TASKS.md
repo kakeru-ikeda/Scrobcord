@@ -117,8 +117,7 @@
   - [x] フォーマットプレビュー（現在のトラック情報で即時レンダリング）
 - [x] `GeneralSettings.tsx`
   - [x] ポーリング間隔スライダー（5〜60s、ラベル付き）
-  - [x] ログイン時起動 toggle
-  - [x] トレイ最小化 toggle
+  - [x] ログイン時起動 toggle - [x] Discord RPC 送信 toggle（`rpc_enabled`）— 分植運用時に片方のマシンでの二重 RPC 書き込みを防止 - [x] トレイ最小化 toggle
   - [x] 言語選択（ja / en）
 - [x] 設定変更を `save_settings` で即時保存（デバウンス付き）
 

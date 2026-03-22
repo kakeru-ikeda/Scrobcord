@@ -234,7 +234,7 @@ pub struct Settings {
 
     // Discord RPC
     pub discord_app_id: String,
-    pub discord_enabled: bool,
+    pub rpc_enabled: bool,           // false にすると Discord への送信をスキップ（多PC運用時に便利）
     pub rpc_details_format: String,  // 例: "{artist} - {track}"
     pub rpc_state_format: String,    // 例: "{album}"
     pub rpc_show_album_art: bool,

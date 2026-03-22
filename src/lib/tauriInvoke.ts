@@ -26,6 +26,7 @@ export interface DiscordStatus {
 export interface Settings {
   lastfm_username: string;
   discord_app_id: string;
+  rpc_enabled: boolean;
   rpc_details_format: string;
   rpc_state_format: string;
   rpc_name_format: string;
