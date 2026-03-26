@@ -1,6 +1,6 @@
 [package]
 name = "scrobcord"
-version = "0.0.3"
+version = "0.0.4"
 description = "Last.fm scrobble → Discord Rich Presence"
 authors = []
 edition = "2021"
