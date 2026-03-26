@@ -89,6 +89,7 @@ pub fn run() {
                 w.set_focus().ok();
             }
         }))
+        .plugin(tauri_plugin_window_state::Builder::default().build())
         .manage(app_state)
         .setup(|app| {
             setup_app(app)?;
@@ -165,11 +166,11 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         autostart.disable().ok();
     }
 
-    // --autostart 引数付きで起動かつ start_minimized が有効な場合はウィンドウを非表示にする
+    // --autostart 引数付きで起動かつ start_minimized が有効な場合はウィンドウを非表示のまま維持、それ以外は表示する
     let is_autostart = std::env::args().any(|a| a == "--autostart");
-    if is_autostart && start_minimized {
-        if let Some(w) = app.get_webview_window("main") {
-            w.hide().ok();
+    if let Some(w) = app.get_webview_window("main") {
+        if !(is_autostart && start_minimized) {
+            w.show().ok();
         }
     }
 
