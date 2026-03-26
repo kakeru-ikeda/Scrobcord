@@ -6,6 +6,7 @@
  * 以下のファイルのバージョンを一括更新し、git commit → tag → push する:
  *   - package.json
  *   - src-tauri/Cargo.toml
+ *   - src-tauri/Cargo.lock
  *   - src-tauri/tauri.conf.json
  */
 
@@ -54,10 +55,19 @@ tauriConfContent = tauriConfContent.replace(
 writeFileSync(tauriConfPath, tauriConfContent);
 console.log(`  src-tauri/tauri.conf.json → ${version}`);
 
+// --- Cargo.lock ----------------------------------------------------------
+// `cargo metadata` を実行して Cargo.lock のバージョンを更新する
+console.log(`  src-tauri/Cargo.lock → updating...`);
+execSync("cargo metadata --format-version 1 --no-deps --quiet", {
+  cwd: resolve(root, "src-tauri"),
+  stdio: "inherit",
+});
+console.log(`  src-tauri/Cargo.lock → ${version}`);
+
 // --- git -----------------------------------------------------------------
 console.log(`\nGit: commit, tag ${tag}, push...`);
 execSync(
-  "git add package.json src-tauri/Cargo.toml src-tauri/tauri.conf.json",
+  "git add package.json src-tauri/Cargo.toml src-tauri/tauri.conf.json src-tauri/Cargo.lock",
   { cwd: root, stdio: "inherit" }
 );
 execSync(`git commit -m "chore: bump version to ${tag}"`, {
