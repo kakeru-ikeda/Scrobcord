@@ -11,6 +11,31 @@ use state::{AppState, AppStateInner};
 use std::sync::{Arc, Mutex};
 use tauri::Manager;
 
+/// 言語コードに応じたトレイメニューのラベルを返す (show, toggle, quit)
+fn tray_labels(lang: &str) -> (&'static str, &'static str, &'static str) {
+    match lang {
+        "ja" => ("表示", "停止 / 再開", "終了"),
+        _ => ("Show", "Pause / Resume", "Quit"),
+    }
+}
+
+/// トレイメニューのラベルを現在の言語で更新する
+pub fn update_tray_labels(app: &tauri::AppHandle, lang: &str) {
+    use tauri::menu::{Menu, MenuItem};
+    let (show, toggle, quit) = tray_labels(lang);
+    if let Some(tray) = app.tray_by_id("main") {
+        if let (Ok(s), Ok(t), Ok(q)) = (
+            MenuItem::with_id(app, "show", show, true, None::<&str>),
+            MenuItem::with_id(app, "toggle", toggle, true, None::<&str>),
+            MenuItem::with_id(app, "quit", quit, true, None::<&str>),
+        ) {
+            if let Ok(menu) = Menu::with_items(app, &[&s, &t, &q]) {
+                tray.set_menu(Some(menu)).ok();
+            }
+        }
+    }
+}
+
 /// Discord アクティビティをクリアして切断する（終了処理の共通実装）
 fn discord_cleanup(app: &tauri::AppHandle) {
     let state = app.state::<AppState>();
@@ -124,6 +149,7 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     // ストアから設定を読み込み AppState に反映
     let loaded = commands::settings::load_settings_from_store(app.handle());
     let start_on_login = loaded.start_on_login;
+    let language = loaded.language.clone();
 
     {
         let state = app.state::<AppState>();
@@ -139,9 +165,10 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // トレイメニューを構築
-    let show_item = MenuItem::with_id(app, "show", "表示", true, None::<&str>)?;
-    let toggle_item = MenuItem::with_id(app, "toggle", "停止 / 再開", true, None::<&str>)?;
-    let quit_item = MenuItem::with_id(app, "quit", "終了", true, None::<&str>)?;
+    let (show_label, toggle_label, quit_label) = tray_labels(&language);
+    let show_item = MenuItem::with_id(app, "show", show_label, true, None::<&str>)?;
+    let toggle_item = MenuItem::with_id(app, "toggle", toggle_label, true, None::<&str>)?;
+    let quit_item = MenuItem::with_id(app, "quit", quit_label, true, None::<&str>)?;
     let menu = Menu::with_items(app, &[&show_item, &toggle_item, &quit_item])?;
 
     TrayIconBuilder::with_id("main")

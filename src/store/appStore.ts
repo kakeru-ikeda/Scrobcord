@@ -19,7 +19,7 @@ export const useAppStore = create<AppStore>((set) => ({
   discordStatus: { connected: false },
   lastfmStatus: { authenticated: false },
   pollingRunning: false,
-  language: "ja",
+  language: "en",
   setNowPlaying: (track) => set({ nowPlaying: track }),
   setDiscordStatus: (status) => set({ discordStatus: status }),
   setLastfmStatus: (status) => set({ lastfmStatus: status }),

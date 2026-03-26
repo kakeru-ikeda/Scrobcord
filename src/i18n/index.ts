@@ -8,8 +8,8 @@ i18n.use(initReactI18next).init({
     ja: { translation: ja },
     en: { translation: en },
   },
-  lng: "ja",
-  fallbackLng: "ja",
+  lng: "en",
+  fallbackLng: "en",
   interpolation: {
     escapeValue: false, // React は XSS 対策済み
   },

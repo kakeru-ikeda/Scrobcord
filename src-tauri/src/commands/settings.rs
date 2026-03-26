@@ -69,6 +69,9 @@ pub async fn save_settings(
     );
     store.save().map_err(|e| format!("store save: {e}"))?;
 
+    // 言語が変わったらトレイメニューのラベルを更新
+    crate::update_tray_labels(&app, &settings.language);
+
     // Discord RPC の表示設定が変わっても次のポーリングまで待たず即時反映する
     {
         let state_arc = Arc::clone(&state.0);
