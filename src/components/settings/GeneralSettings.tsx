@@ -21,15 +21,17 @@ function SwitchRow({
   label,
   checked,
   onCheckedChange,
+  disabled,
 }: {
   label: string;
   checked: boolean;
   onCheckedChange: (v: boolean) => void;
+  disabled?: boolean;
 }) {
   return (
-    <div className="flex items-center justify-between">
+    <div className={`flex items-center justify-between${disabled ? " opacity-40" : ""}`}>
       <Label>{label}</Label>
-      <Switch checked={checked} onCheckedChange={onCheckedChange} />
+      <Switch checked={checked} onCheckedChange={onCheckedChange} disabled={disabled} />
     </div>
   );
 }
@@ -97,6 +99,12 @@ export default function GeneralSettings({ settings, onChange, onResetSavedData }
           label={t("general.startOnLogin")}
           checked={settings.start_on_login}
           onCheckedChange={(v) => onChange({ start_on_login: v })}
+        />
+        <SwitchRow
+          label={t("general.startMinimized")}
+          checked={settings.start_minimized}
+          onCheckedChange={(v) => onChange({ start_minimized: v })}
+          disabled={!settings.start_on_login}
         />
         <SwitchRow
           label={t("general.minimizeToTray")}

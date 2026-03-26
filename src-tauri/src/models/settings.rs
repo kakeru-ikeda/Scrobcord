@@ -18,6 +18,7 @@ pub struct Settings {
     // General
     pub poll_interval_secs: u64,
     pub start_on_login: bool,
+    pub start_minimized: bool,
     pub minimize_to_tray: bool,
     pub language: String,
 }
@@ -35,6 +36,7 @@ impl Default for Settings {
             rpc_show_album_art: true,
             poll_interval_secs: 15,
             start_on_login: false,
+            start_minimized: false,
             minimize_to_tray: true,
             language: "ja".to_string(),
         }

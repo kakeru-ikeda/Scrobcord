@@ -34,6 +34,7 @@ export interface Settings {
   rpc_show_album_art: boolean;
   poll_interval_secs: number;
   start_on_login: boolean;
+  start_minimized: boolean;
   minimize_to_tray: boolean;
   language: string;
 }

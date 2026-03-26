@@ -63,6 +63,7 @@
     "pollMin": "5秒",
     "pollMax": "60秒",
     "startOnLogin": "ログイン時に起動",
+    "startMinimized": "ログイン時に最小化して起動",
     "minimizeToTray": "ウィンドウを閉じたらトレイに格納",
     "rpcEnabled": "Discord RPC に送信する",
     "language": "言語 / Language",

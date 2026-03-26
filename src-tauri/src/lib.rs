@@ -75,7 +75,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
-            Some(vec![]),
+            Some(vec!["--autostart"]),
         ))
         .plugin(
             tauri_plugin_log::Builder::default()
@@ -149,6 +149,7 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     // ストアから設定を読み込み AppState に反映
     let loaded = commands::settings::load_settings_from_store(app.handle());
     let start_on_login = loaded.start_on_login;
+    let start_minimized = loaded.start_minimized;
     let language = loaded.language.clone();
 
     {
@@ -162,6 +163,14 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         autostart.enable().ok();
     } else {
         autostart.disable().ok();
+    }
+
+    // --autostart 引数付きで起動かつ start_minimized が有効な場合はウィンドウを非表示にする
+    let is_autostart = std::env::args().any(|a| a == "--autostart");
+    if is_autostart && start_minimized {
+        if let Some(w) = app.get_webview_window("main") {
+            w.hide().ok();
+        }
     }
 
     // トレイメニューを構築
