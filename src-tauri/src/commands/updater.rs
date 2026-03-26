@@ -45,6 +45,38 @@ pub async fn check_for_updates() -> Result<UpdateInfo, String> {
         });
     }
 
+    // 403 Forbidden / 429 Too Many Requests — GitHub API レートリミット
+    if response.status() == reqwest::StatusCode::FORBIDDEN
+        || response.status() == reqwest::StatusCode::TOO_MANY_REQUESTS
+    {
+        // Retry-After ヘッダーがあれば待機秒数を提示する
+        let retry_after = response
+            .headers()
+            .get("Retry-After")
+            .and_then(|v| v.to_str().ok())
+            .map(|s| format!(" ({s}秒後に再試行)"))
+            .unwrap_or_default();
+
+        // レスポンスボディに GitHub のエラーメッセージが含まれる場合は使用する
+        let github_msg = if let Ok(body) = response.json::<serde_json::Value>().await {
+            body["message"]
+                .as_str()
+                .map(|s| s.to_string())
+                .unwrap_or_default()
+        } else {
+            String::new()
+        };
+
+        let msg = if github_msg.is_empty() {
+            format!("GitHub API レートリミット超過{retry_after}")
+        } else {
+            format!("GitHub API: {github_msg}{retry_after}")
+        };
+
+        log::warn!("アップデート確認: {}", msg);
+        return Err(msg);
+    }
+
     // その他の HTTP エラー
     if !response.status().is_success() {
         return Err(format!(

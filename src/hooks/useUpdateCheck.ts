@@ -35,8 +35,26 @@ export function useUpdateCheck(): UseUpdateCheckResult {
   };
 
   // マウント時に自動チェック
+  // React StrictMode での二重実行を防ぐため cancelled フラグを使用する
   useEffect(() => {
-    check();
+    let cancelled = false;
+
+    const runAutoCheck = async () => {
+      setChecking(true);
+      setError(null);
+      try {
+        const info = await checkForUpdates();
+        if (!cancelled) setUpdateInfo(info);
+      } catch (e) {
+        console.warn("アップデート確認に失敗しました:", e);
+        if (!cancelled) setError(String(e));
+      } finally {
+        if (!cancelled) setChecking(false);
+      }
+    };
+
+    runAutoCheck();
+    return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

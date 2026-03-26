@@ -8,7 +8,7 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
-    "release": "node -e \"const v=process.argv[1]; if(!v)throw new Error('Usage: npm run release v1.2.3'); const tag=v.startsWith('v')?v:'v'+v; require('child_process').execSync('git tag '+tag+' && git push origin '+tag,{stdio:'inherit'});\" --"
+    "release": "node scripts/release.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",
