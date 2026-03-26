@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <!-- 黄色の彩度と明度を少し落とし（パステル調・マイルドに）、水色との馴染みを良くしたグラデーション -->
+    <linearGradient id="premium-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFE66D" />   <!-- 柔らかいレモンイエロー -->
+      <stop offset="50%" stop-color="#FFC857" />  <!-- マイルドな温かみのある黄色 -->
+      <stop offset="100%" stop-color="#48CAE4" />   <!-- 落ち着いたシアン（水色） -->
+    </linearGradient>
+  </defs>
+
+  <g stroke="url(#premium-grad)">
+    <!-- 外側のC (左右均等な余白) -->
+    <path 
+      d="M 438.5 105 
+         A 214 214 0 1 0 438.5 407" 
+      fill="none" 
+      stroke-width="72" 
+      stroke-linecap="round" 
+    />
+    
+    <!-- 中央のプレイボタン (さらに右へ12pxシフトして視覚的中心を追求) -->
+    <path 
+      d="M 226 172 L 370 256 L 226 340 Z" 
+      fill="url(#premium-grad)" 
+      stroke-width="36" 
+      stroke-linejoin="round" 
+    />
+  </g>
+</svg>
