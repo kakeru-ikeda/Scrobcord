@@ -279,10 +279,21 @@ pub async fn lastfm_get_session(
                 .map_err(|e| e.user_message())?,
         );
     }
-    let session = client
+    let mut result = client
         .get_session_signed(&token, signature.as_ref().unwrap())
-        .await
-        .map_err(|e| e.user_message())?;
+        .await;
+    // secret を差し替えた直後は署名が合わないことがあるので、1 回だけ取り直す
+    if matches!(&result, Err(AuthError::Lastfm(e)) if e.code == 13) {
+        let fresh = client
+            .request_signature(
+                "auth.getSession",
+                &BTreeMap::from([("token".into(), token.clone())]),
+            )
+            .await
+            .map_err(|e| e.user_message())?;
+        result = client.get_session_signed(&token, &fresh).await;
+    }
+    let session = result.map_err(|e| e.user_message())?;
 
     complete_auth(&app, &state.0, session).await
 }
