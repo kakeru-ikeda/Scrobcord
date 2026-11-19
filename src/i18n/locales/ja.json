@@ -38,7 +38,8 @@
     "logout": "ログアウト",
     "waitingBrowser": "ブラウザで承認するのを待っています...",
     "cancel": "キャンセル",
-    "login": "Last.fm でログイン"
+    "login": "Last.fm でログイン",
+    "keyChanged": "Last.fm のキーが変わったため、再ログインが必要です"
   },
   "discord": {
     "previewTitle": "Discord プレビュー",

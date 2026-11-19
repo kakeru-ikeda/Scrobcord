@@ -56,6 +56,7 @@ pub fn run() {
         auth_status: AuthStatus {
             authenticated: false,
             username: None,
+            notice: None,
         },
         discord_status: DiscordStatus {
             connected: false,

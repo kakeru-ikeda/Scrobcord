@@ -38,7 +38,8 @@
     "logout": "Logout",
     "waitingBrowser": "Waiting for browser authorization...",
     "cancel": "Cancel",
-    "login": "Log in with Last.fm"
+    "login": "Log in with Last.fm",
+    "keyChanged": "The Last.fm API key has changed. Please log in again."
   },
   "discord": {
     "previewTitle": "Discord Preview",

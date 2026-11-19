@@ -89,7 +89,9 @@ export default function Dashboard({ onNavigateSettings }: DashboardProps) {
           {!isReady ? (
             <div className="flex flex-col items-center justify-center gap-2 px-6 py-4 text-center text-muted-foreground">
               <p className="text-sm">{t("dashboard.notConnected")}</p>
-              <p className="text-xs opacity-70">{t("dashboard.loginPrompt")}</p>
+              <p className="text-xs opacity-70">
+                {lastfm.notice === "key_changed" ? t("lastfm.keyChanged") : t("dashboard.loginPrompt")}
+              </p>
             </div>
           ) : (
             <NowPlayingCard />

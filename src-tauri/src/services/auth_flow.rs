@@ -1,5 +1,3 @@
-#![allow(dead_code)] // Task 3 で外す
-
 use super::scrobsign::{SignError, Signature};
 
 pub const LFM_INVALID_TOKEN: i64 = 4;

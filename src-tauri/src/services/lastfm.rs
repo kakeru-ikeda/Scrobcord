@@ -25,7 +25,6 @@ pub struct LastfmClient {
 pub struct LastfmSession {
     pub key: String,
     pub username: String,
-    #[allow(dead_code)] // Task 3 で外す
     pub api_key: String,
 }
 

@@ -11,7 +11,7 @@ use tauri_plugin_store::StoreExt;
 use tokio_util::sync::CancellationToken;
 
 use crate::models::status::AuthStatus;
-use crate::services::auth_flow::{AuthError, PollAction, TokenSignatureCache};
+use crate::services::auth_flow::{evaluate_stored_session, AuthError, PollAction, StoredSessionState, TokenSignatureCache};
 use crate::services::lastfm::LastfmSession;
 use crate::state::{AppState, AppStateInner, PendingAuth};
 
@@ -19,6 +19,7 @@ const KEYRING_SERVICE: &str = "scrobcord";
 const KEYRING_SESSION_KEY: &str = "lastfm_session_key";
 const STORE_PATH: &str = "settings.json";
 const STORE_KEY: &str = "settings";
+pub const STORE_SESSION_API_KEY: &str = "lastfm_session_api_key";
 /// 自動ポーリングのタイムアウト（秒）
 const AUTH_POLL_TIMEOUT_SECS: u64 = 300;
 /// ポーリング間隔（秒）
@@ -29,6 +30,34 @@ pub fn load_session_key() -> Option<String> {
     Entry::new(KEYRING_SERVICE, KEYRING_SESSION_KEY)
         .ok()
         .and_then(|e| e.get_password().ok())
+}
+
+fn save_session_api_key(app: &AppHandle, api_key: &str) {
+    match app.store(STORE_PATH) {
+        Ok(store) => {
+            store.set(STORE_SESSION_API_KEY, serde_json::json!(api_key));
+            if let Err(e) = store.save() {
+                warn!("failed to save Last.fm session api_key: {e}");
+            }
+        }
+        Err(e) => warn!("failed to open store for Last.fm session api_key: {e}"),
+    }
+}
+
+fn load_session_api_key(app: &AppHandle) -> Option<String> {
+    app.store(STORE_PATH).ok()?.get(STORE_SESSION_API_KEY)?.as_str().map(str::to_owned)
+}
+
+pub fn clear_session_api_key(app: &AppHandle) {
+    match app.store(STORE_PATH) {
+        Ok(store) => {
+            store.delete(STORE_SESSION_API_KEY);
+            if let Err(e) = store.save() {
+                warn!("failed to clear Last.fm session api_key: {e}");
+            }
+        }
+        Err(e) => warn!("failed to open store to clear Last.fm session api_key: {e}"),
+    }
 }
 
 /// OS キーチェーンに session_key を保存する
@@ -46,10 +75,12 @@ async fn complete_auth(
     session: LastfmSession,
 ) -> Result<(), String> {
     store_session_key(&session.key)?;
+    save_session_api_key(app, &session.api_key);
 
     let status = AuthStatus {
         authenticated: true,
         username: Some(session.username.clone()),
+        notice: None,
     };
 
     let settings = {
@@ -299,6 +330,7 @@ pub async fn lastfm_logout(
     if let Ok(entry) = Entry::new(KEYRING_SERVICE, KEYRING_SESSION_KEY) {
         let _ = entry.delete_password();
     }
+    clear_session_api_key(&app);
 
     {
         let mut inner = state.0.lock().unwrap();
@@ -307,6 +339,7 @@ pub async fn lastfm_logout(
         inner.auth_status = AuthStatus {
             authenticated: false,
             username: None,
+            notice: None,
         };
     }
 
@@ -344,6 +377,7 @@ pub async fn lastfm_logout(
         AuthStatus {
             authenticated: false,
             username: None,
+            notice: None,
         },
     )
     .map_err(|e| e.to_string())?;
@@ -352,19 +386,30 @@ pub async fn lastfm_logout(
 }
 
 #[tauri::command]
-pub fn lastfm_get_auth_status(state: tauri::State<'_, AppState>) -> AuthStatus {
+pub fn lastfm_get_auth_status(app: AppHandle, state: tauri::State<'_, AppState>) -> AuthStatus {
     // 起動時に keyring から session_key を確認して状態を同期する
     let has_session = load_session_key().is_some();
+    let stored_api_key = load_session_api_key(&app);
     let mut inner = state.0.lock().unwrap();
-
-    if has_session && !inner.auth_status.authenticated {
-        inner.auth_status.authenticated = true;
-        if inner.auth_status.username.is_none() && !inner.settings.lastfm_username.is_empty() {
-            inner.auth_status.username = Some(inner.settings.lastfm_username.clone());
+    match evaluate_stored_session(has_session, stored_api_key.as_deref(), inner.lastfm_client.embedded_api_key()) {
+        StoredSessionState::Valid => {
+            inner.auth_status.authenticated = true;
+            inner.auth_status.notice = None;
+            if inner.auth_status.username.is_none() && !inner.settings.lastfm_username.is_empty() {
+                inner.auth_status.username = Some(inner.settings.lastfm_username.clone());
+            }
         }
-    } else if !has_session {
-        inner.auth_status.authenticated = false;
-        inner.auth_status.username = None;
+        StoredSessionState::NotLoggedIn => {
+            inner.auth_status.authenticated = false;
+            inner.auth_status.username = None;
+            inner.auth_status.notice = None;
+        }
+        StoredSessionState::KeyChanged => {
+            inner.auth_status.authenticated = false;
+            inner.auth_status.username = None;
+            inner.auth_status.notice = Some("key_changed".into());
+            info!("lastfm session was issued for a different api_key; re-login required");
+        }
     }
 
     info!(

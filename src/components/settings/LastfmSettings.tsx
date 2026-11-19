@@ -29,10 +29,11 @@ export default function LastfmSettings({ settings: _settings, onChange: _onChang
 
   // lastfm-auth-polling イベントを購読して自動完了を受け取る
   useEffect(() => {
-    const unlisten = listen<{ polling: boolean }>("lastfm-auth-polling", (e) => {
+    const unlisten = listen<{ polling: boolean; error?: string | null }>("lastfm-auth-polling", (e) => {
       setIsPolling(e.payload.polling);
       if (!e.payload.polling) {
         setPending(null);
+        if (e.payload.error) setError(e.payload.error);
       }
     });
     return () => {
@@ -109,6 +110,9 @@ export default function LastfmSettings({ settings: _settings, onChange: _onChang
         </div>
       ) : (
         <div className="flex flex-col gap-2">
+          {lastfmStatus.notice === "key_changed" && (
+            <p className="text-xs text-amber-400">{t("lastfm.keyChanged")}</p>
+          )}
           {isPolling ? (
             /* ブラウザ承認待ちのポーリング中表示 */
             <div className="flex flex-col gap-2">
@@ -147,4 +151,3 @@ export default function LastfmSettings({ settings: _settings, onChange: _onChang
     </div>
   );
 }
-
