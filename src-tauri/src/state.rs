@@ -8,6 +8,12 @@ use crate::models::{
 };
 use crate::services::discord_rpc::DiscordRpcClient;
 use crate::services::lastfm::LastfmClient;
+use crate::services::scrobsign::Signature;
+
+pub struct PendingAuth {
+    pub token: String,
+    pub signature: Option<Signature>,
+}
 
 pub struct AppStateInner {
     pub settings: Settings,
@@ -20,7 +26,7 @@ pub struct AppStateInner {
     /// tokio ワーカースレッドが詰まって UI が「応答なし」になるため。
     pub discord_client: Arc<Mutex<DiscordRpcClient>>,
     /// Last.fm OAuth の一時トークン（getToken → getSession 間のみ保持）
-    pub pending_auth_token: Option<String>,
+    pub pending_auth: Option<PendingAuth>,
     /// Last.fm 認証ポーリングタスクのキャンセルトークン
     pub auth_poll_cancel_token: Option<CancellationToken>,
     /// 共有 Last.fm クライアント（reqwest コネクションプールを使い回す）

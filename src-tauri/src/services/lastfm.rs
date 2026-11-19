@@ -1,17 +1,47 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, time::Duration};
 
 use log::debug;
 
 use crate::models::track::{RecentTracksPage, ScrobbledTrack, Track};
+use crate::services::{
+    auth_flow::{self, AuthError, AuthToken},
+    scrobsign::{self, SignError, Signature},
+};
 
 const API_ROOT: &str = "https://ws.audioscrobbler.com/2.0/";
 
-// ビルド時に環境変数 LASTFM_API_KEY / LASTFM_API_SECRET を埋め込む
+pub(crate) fn interpret_read_response(
+    status: u16,
+    body: &str,
+) -> Result<serde_json::Value, String> {
+    match serde_json::from_str(body) {
+        Ok(value) => {
+            if let Some(err) = auth_flow::parse_lastfm_error(&value) {
+                return Err(match err.code {
+                    11 | 16 | 29 => {
+                        format!("transient: Last.fm error {}: {}", err.code, err.message)
+                    }
+                    10 | 26 => format!(
+                        "Last.fm のサービス側の問題です（error {}）: {}",
+                        err.code, err.message
+                    ),
+                    _ => format!("Last.fm error {}: {}", err.code, err.message),
+                });
+            }
+            Ok(value)
+        }
+        Err(_) if status == 429 || status >= 500 => {
+            Err(format!("transient: Last.fm HTTP {status} error"))
+        }
+        Err(_) => Err(format!(
+            "Last.fm returned non-JSON (HTTP {status}, {} bytes)",
+            body.len()
+        )),
+    }
+}
+
+// ビルド時に環境変数 LASTFM_API_KEY(新しいキーの api_key。秘密ではない)を埋め込む
 const EMBEDDED_API_KEY: &str = match option_env!("LASTFM_API_KEY") {
-    Some(k) => k,
-    None => "",
-};
-const EMBEDDED_API_SECRET: &str = match option_env!("LASTFM_API_SECRET") {
     Some(k) => k,
     None => "",
 };
@@ -19,123 +49,110 @@ const EMBEDDED_API_SECRET: &str = match option_env!("LASTFM_API_SECRET") {
 #[derive(Clone)]
 pub struct LastfmClient {
     pub api_key: String,
-    api_secret: String,
     client: reqwest::Client,
 }
 
 pub struct LastfmSession {
     pub key: String,
     pub username: String,
+    pub api_key: String,
 }
 
 impl LastfmClient {
     pub fn new() -> Self {
         Self {
             api_key: EMBEDDED_API_KEY.to_string(),
-            api_secret: EMBEDDED_API_SECRET.to_string(),
-            client: reqwest::Client::new(),
+            client: reqwest::Client::builder()
+                .connect_timeout(Duration::from_secs(10))
+                .user_agent(concat!("Scrobcord/", env!("CARGO_PKG_VERSION")))
+                .build()
+                .unwrap_or_else(|_| reqwest::Client::new()),
         }
     }
 
-    // -----------------------------------------------------------------------
-    // 署名生成: MD5(キー昇順連結 + api_secret)
-    // -----------------------------------------------------------------------
-    fn sign(&self, params: &BTreeMap<&str, String>) -> String {
-        let mut plain = String::new();
-        for (k, v) in params {
-            plain.push_str(k);
-            plain.push_str(v);
-        }
-        plain.push_str(&self.api_secret);
-        format!("{:x}", md5::compute(plain.as_bytes()))
+    pub async fn request_signature(
+        &self,
+        method: &str,
+        params: &BTreeMap<String, String>,
+    ) -> Result<Signature, SignError> {
+        scrobsign::request_signature(&self.client, method, params).await
+    }
+
+    pub fn embedded_api_key(&self) -> &str {
+        &self.api_key
     }
 
     // -----------------------------------------------------------------------
     // auth.getToken
     // -----------------------------------------------------------------------
-    pub async fn get_token(&self) -> Result<String, String> {
-        let mut params: BTreeMap<&str, String> = BTreeMap::new();
-        params.insert("api_key", self.api_key.clone());
-        params.insert("method", "auth.getToken".to_string());
-        let api_sig = self.sign(&params);
-
-        let body = self
-            .client
-            .get(API_ROOT)
-            .query(&[
-                ("method", "auth.getToken"),
-                ("api_key", &self.api_key),
-                ("api_sig", &api_sig),
-                ("format", "json"),
-            ])
-            .send()
-            .await
-            .map_err(|e| e.to_string())?
-            .text()
-            .await
-            .map_err(|e| format!("failed to read response: {e}"))?;
-        let resp: serde_json::Value = serde_json::from_str(&body).map_err(|e| {
-            format!(
-                "Last.fm returned non-JSON ({e}): {}",
-                &body[..body.len().min(300)]
-            )
-        })?;
-
-        resp["token"]
-            .as_str()
-            .map(|s| s.to_string())
-            .ok_or_else(|| format!("token not found: {resp}"))
+    pub async fn get_token(&self) -> Result<AuthToken, AuthError> {
+        for attempt in 0..=1 {
+            let sig = self
+                .request_signature("auth.getToken", &BTreeMap::new())
+                .await
+                .map_err(AuthError::Sign)?;
+            auth_flow::check_signer_api_key(&sig.api_key, &self.api_key)?;
+            let response = self
+                .client
+                .get(API_ROOT)
+                .query(&[
+                    ("method", "auth.getToken"),
+                    ("api_key", sig.api_key.as_str()),
+                    ("api_sig", sig.api_sig.as_str()),
+                    ("format", "json"),
+                ])
+                .send()
+                .await
+                .map_err(|e| AuthError::Transport(e.without_url().to_string()))?;
+            let body = response
+                .text()
+                .await
+                .map_err(|e| AuthError::Transport(e.without_url().to_string()))?;
+            match auth_flow::parse_token_response(&body) {
+                Ok(token) => {
+                    return Ok(AuthToken {
+                        token,
+                        api_key: sig.api_key,
+                    })
+                }
+                Err(e) if auth_flow::should_resign_token_request(&e, attempt) => continue,
+                Err(e) => return Err(e),
+            }
+        }
+        unreachable!("token signature retry loop returns on its second attempt")
     }
 
     // -----------------------------------------------------------------------
     // auth.getSession
     // -----------------------------------------------------------------------
-    pub async fn get_session(&self, token: &str) -> Result<LastfmSession, String> {
-        let mut params: BTreeMap<&str, String> = BTreeMap::new();
-        params.insert("api_key", self.api_key.clone());
-        params.insert("method", "auth.getSession".to_string());
-        params.insert("token", token.to_string());
-        let api_sig = self.sign(&params);
-
-        let body = self
+    pub async fn get_session_signed(
+        &self,
+        token: &str,
+        sig: &Signature,
+    ) -> Result<LastfmSession, AuthError> {
+        let response = self
             .client
             .get(API_ROOT)
             .query(&[
                 ("method", "auth.getSession"),
-                ("api_key", &self.api_key),
+                ("api_key", sig.api_key.as_str()),
                 ("token", token),
-                ("api_sig", &api_sig),
+                ("api_sig", sig.api_sig.as_str()),
                 ("format", "json"),
             ])
             .send()
             .await
-            .map_err(|e| e.to_string())?
+            .map_err(|e| AuthError::Transport(e.without_url().to_string()))?;
+        let body = response
             .text()
             .await
-            .map_err(|e| format!("failed to read response: {e}"))?;
-        let resp: serde_json::Value = serde_json::from_str(&body).map_err(|e| {
-            format!(
-                "Last.fm returned non-JSON ({e}): {}",
-                &body[..body.len().min(300)]
-            )
-        })?;
-
-        // エラーレスポンス確認
-        if let Some(err_msg) = resp["message"].as_str() {
-            return Err(format!("Last.fm error: {err_msg}"));
-        }
-
-        let key = resp["session"]["key"]
-            .as_str()
-            .map(|s| s.to_string())
-            .ok_or_else(|| format!("session key not found: {resp}"))?;
-
-        let username = resp["session"]["name"]
-            .as_str()
-            .map(|s| s.to_string())
-            .ok_or_else(|| format!("session username not found: {resp}"))?;
-
-        Ok(LastfmSession { key, username })
+            .map_err(|e| AuthError::Transport(e.without_url().to_string()))?;
+        let (key, username) = auth_flow::parse_session_response(&body)?;
+        Ok(LastfmSession {
+            key,
+            username,
+            api_key: sig.api_key.clone(),
+        })
     }
 
     // -----------------------------------------------------------------------
@@ -156,7 +173,7 @@ impl LastfmClient {
             ])
             .send()
             .await
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| e.without_url().to_string())?;
 
         let status = response.status();
         let body = response
@@ -164,20 +181,7 @@ impl LastfmClient {
             .await
             .map_err(|e| format!("failed to read response: {e}"))?;
 
-        if status.is_server_error() || status.is_client_error() {
-            return Err(format!("transient: Last.fm HTTP {} error", status.as_u16()));
-        }
-
-        let resp: serde_json::Value = serde_json::from_str(&body).map_err(|e| {
-            format!(
-                "Last.fm returned non-JSON ({e}): {}",
-                &body[..body.len().min(300)]
-            )
-        })?;
-
-        if let Some(err_msg) = resp["message"].as_str() {
-            return Err(format!("Last.fm error: {err_msg}"));
-        }
+        let resp = interpret_read_response(status.as_u16(), &body)?;
 
         let tracks = resp["recenttracks"]["track"]
             .as_array()
@@ -269,7 +273,7 @@ impl LastfmClient {
             username, page, limit
         );
 
-        let body = self
+        let response = self
             .client
             .get(API_ROOT)
             .query(&[
@@ -282,20 +286,13 @@ impl LastfmClient {
             ])
             .send()
             .await
-            .map_err(|e| e.to_string())?
+            .map_err(|e| e.without_url().to_string())?;
+        let status = response.status();
+        let body = response
             .text()
             .await
-            .map_err(|e| format!("failed to read response: {e}"))?;
-        let resp: serde_json::Value = serde_json::from_str(&body).map_err(|e| {
-            format!(
-                "Last.fm returned non-JSON ({e}): {}",
-                &body[..body.len().min(300)]
-            )
-        })?;
-
-        if let Some(err_msg) = resp["message"].as_str() {
-            return Err(format!("Last.fm error: {err_msg}"));
-        }
+            .map_err(|e| e.without_url().to_string())?;
+        let resp = interpret_read_response(status.as_u16(), &body)?;
 
         let recent = &resp["recenttracks"];
 
@@ -387,72 +384,46 @@ impl LastfmClient {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::interpret_read_response;
 
     #[test]
-    fn test_sign_correct_order_and_hash() {
-        // params: api_key=xxx, method=auth.getToken, secret=yyy のテスト用に直接インスタンス生成
-        let client = LastfmClient {
-            api_key: "xxx".to_string(),
-            api_secret: "yyy".to_string(),
-            client: reqwest::Client::new(),
-        };
-        let mut params: BTreeMap<&str, String> = BTreeMap::new();
-        params.insert("api_key", "xxx".to_string());
-        params.insert("method", "auth.getToken".to_string());
-
-        let sig = client.sign(&params);
-
-        // python: hashlib.md5(b"api_keyxxxmethodauth.getTokenyyy").hexdigest()
+    fn interprets_read_response_errors_from_the_body() {
         assert_eq!(
-            sig,
-            format!("{:x}", md5::compute(b"api_keyxxxmethodauth.getTokenyyy"))
+            interpret_read_response(200, r#"{"recenttracks":{"track":[]}}"#),
+            Ok(serde_json::json!({"recenttracks":{"track":[]}}))
         );
-    }
 
-    #[test]
-    fn test_sign_keys_sorted_lexicographically() {
-        let client = LastfmClient {
-            api_key: "mykey".to_string(),
-            api_secret: "mysecret".to_string(),
-            client: reqwest::Client::new(),
-        };
-        let mut params: BTreeMap<&str, String> = BTreeMap::new();
-        params.insert("token", "mytoken".to_string());
-        params.insert("api_key", "mykey".to_string());
-        params.insert("method", "auth.getSession".to_string());
+        for code in [26, 10] {
+            let error = interpret_read_response(
+                403,
+                &format!(r#"{{"error":{code},"message":"Suspended API key"}}"#),
+            )
+            .unwrap_err();
+            assert!(error.contains("サービス側の問題"));
+            assert!(!error.starts_with("transient:"));
+        }
 
-        let sig = client.sign(&params);
-        // BTreeMap はキー昇順: api_key, method, token
-        let expected = format!(
-            "{:x}",
-            md5::compute(b"api_keymykeyauthmethod.getSessiontokenmytokenmysecret")
+        assert_eq!(
+            interpret_read_response(400, r#"{"error":6,"message":"User not found"}"#)
+                .unwrap_err(),
+            "Last.fm error 6: User not found"
         );
-        // 正しい連結: "api_key" + "mykey" + "method" + "auth.getSession" + "token" + "mytoken" + "mysecret"
-        let expected_correct = format!(
-            "{:x}",
-            md5::compute(
-                "api_keymykeymethod auth.getSessiontokenmytokenmysecret"
-                    .replace(' ', "")
-                    .as_bytes()
-            )
-        );
-        let manually = format!(
-            "{:x}",
-            md5::compute(
-                format!(
-                    "api_keymykeymethod{}tokenmytokenmysecret",
-                    "auth.getSession"
-                )
-                .as_bytes()
-            )
-        );
-        assert_eq!(sig, manually);
-        let _ = (expected, expected_correct); // suppress warnings
+
+        assert!(interpret_read_response(
+            500,
+            r#"{"error":16,"message":"Temporary error"}"#
+        )
+        .unwrap_err()
+        .starts_with("transient:"));
+
+        assert!(interpret_read_response(502, "<html>upstream error</html>")
+            .unwrap_err()
+            .starts_with("transient:"));
+
+        let error = interpret_read_response(404, "<html>not found</html>").unwrap_err();
+        assert!(error.contains("non-JSON"));
+        assert!(!error.starts_with("transient:"));
     }
 }

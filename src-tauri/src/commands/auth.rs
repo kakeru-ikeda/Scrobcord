@@ -1,4 +1,7 @@
-use std::sync::{Arc, Mutex};
+use std::{
+    collections::BTreeMap,
+    sync::{Arc, Mutex},
+};
 
 use keyring::Entry;
 use log::{info, warn};
@@ -8,13 +11,15 @@ use tauri_plugin_store::StoreExt;
 use tokio_util::sync::CancellationToken;
 
 use crate::models::status::AuthStatus;
-use crate::services::lastfm::{LastfmSession};
-use crate::state::{AppState, AppStateInner};
+use crate::services::auth_flow::{evaluate_stored_session, AuthError, PollAction, StoredSessionState, TokenSignatureCache};
+use crate::services::lastfm::LastfmSession;
+use crate::state::{AppState, AppStateInner, PendingAuth};
 
 const KEYRING_SERVICE: &str = "scrobcord";
 const KEYRING_SESSION_KEY: &str = "lastfm_session_key";
 const STORE_PATH: &str = "settings.json";
 const STORE_KEY: &str = "settings";
+pub const STORE_SESSION_API_KEY: &str = "lastfm_session_api_key";
 /// 自動ポーリングのタイムアウト（秒）
 const AUTH_POLL_TIMEOUT_SECS: u64 = 300;
 /// ポーリング間隔（秒）
@@ -25,6 +30,34 @@ pub fn load_session_key() -> Option<String> {
     Entry::new(KEYRING_SERVICE, KEYRING_SESSION_KEY)
         .ok()
         .and_then(|e| e.get_password().ok())
+}
+
+fn save_session_api_key(app: &AppHandle, api_key: &str) {
+    match app.store(STORE_PATH) {
+        Ok(store) => {
+            store.set(STORE_SESSION_API_KEY, serde_json::json!(api_key));
+            if let Err(e) = store.save() {
+                warn!("failed to save Last.fm session api_key: {e}");
+            }
+        }
+        Err(e) => warn!("failed to open store for Last.fm session api_key: {e}"),
+    }
+}
+
+fn load_session_api_key(app: &AppHandle) -> Option<String> {
+    app.store(STORE_PATH).ok()?.get(STORE_SESSION_API_KEY)?.as_str().map(str::to_owned)
+}
+
+pub fn clear_session_api_key(app: &AppHandle) {
+    match app.store(STORE_PATH) {
+        Ok(store) => {
+            store.delete(STORE_SESSION_API_KEY);
+            if let Err(e) = store.save() {
+                warn!("failed to clear Last.fm session api_key: {e}");
+            }
+        }
+        Err(e) => warn!("failed to open store to clear Last.fm session api_key: {e}"),
+    }
 }
 
 /// OS キーチェーンに session_key を保存する
@@ -42,17 +75,19 @@ async fn complete_auth(
     session: LastfmSession,
 ) -> Result<(), String> {
     store_session_key(&session.key)?;
+    save_session_api_key(app, &session.api_key);
 
     let status = AuthStatus {
         authenticated: true,
         username: Some(session.username.clone()),
+        notice: None,
     };
 
     let settings = {
         let mut inner = state_arc.lock().unwrap();
         inner.settings.lastfm_username = session.username.clone();
         inner.auth_status = status.clone();
-        inner.pending_auth_token = None;
+        inner.pending_auth = None;
         inner.auth_poll_cancel_token = None;
         inner.settings.clone()
     };
@@ -88,14 +123,15 @@ pub async fn lastfm_get_auth_token(
 ) -> Result<(), String> {
     let client = state.0.lock().unwrap().lastfm_client.clone();
 
-    if client.api_key.is_empty() {
+    if client.embedded_api_key().is_empty() {
         return Err(
             "LASTFM_API_KEY がビルド時に埋め込まれていません。環境変数を設定して再ビルドしてください"
                 .to_string(),
         );
     }
 
-    let token = client.get_token().await?;
+    let auth_token = client.get_token().await.map_err(|e| e.user_message())?;
+    let token = auth_token.token.clone();
 
     // 既存のポーリングをキャンセル
     if let Some(old) = state.0.lock().unwrap().auth_poll_cancel_token.take() {
@@ -106,14 +142,17 @@ pub async fn lastfm_get_auth_token(
     let cancel_token = CancellationToken::new();
     {
         let mut inner = state.0.lock().unwrap();
-        inner.pending_auth_token = Some(token.clone());
+        inner.pending_auth = Some(PendingAuth {
+            token: token.clone(),
+            signature: None,
+        });
         inner.auth_poll_cancel_token = Some(cancel_token.clone());
     }
 
     // ブラウザで認証 URL を開く
     let auth_url = format!(
         "https://www.last.fm/api/auth/?api_key={}&token={}",
-        client.api_key, token
+        auth_token.api_key, token
     );
     app.opener()
         .open_url(&auth_url, None::<&str>)
@@ -130,11 +169,11 @@ pub async fn lastfm_get_auth_token(
     let app_clone = app.clone();
     let state_arc = Arc::clone(&state.0);
     tokio::spawn(async move {
-        let client = {
-            state_arc.lock().unwrap().lastfm_client.clone()
-        };
+        let client = { state_arc.lock().unwrap().lastfm_client.clone() };
         let deadline =
             tokio::time::Instant::now() + tokio::time::Duration::from_secs(AUTH_POLL_TIMEOUT_SECS);
+        let mut cache = TokenSignatureCache::new();
+        let mut stop_message: Option<String> = None;
 
         loop {
             tokio::select! {
@@ -145,22 +184,47 @@ pub async fn lastfm_get_auth_token(
                 _ = tokio::time::sleep(tokio::time::Duration::from_secs(AUTH_POLL_INTERVAL_SECS)) => {
                     if tokio::time::Instant::now() >= deadline {
                         warn!("lastfm auth polling timed out after {}s", AUTH_POLL_TIMEOUT_SECS);
+                        stop_message = Some("ブラウザでの承認が 5 分以内に確認できませんでした。もう一度ログインしてください".into());
                         break;
                     }
-
-                    match client.get_session(&token).await {
+                    if cache.get().is_none() {
+                        let params = BTreeMap::from([("token".to_string(), token.clone())]);
+                        match client.request_signature("auth.getSession", &params).await {
+                            Ok(sig) => {
+                                cache.store(sig.clone());
+                                if let Some(pending) = state_arc.lock().unwrap().pending_auth.as_mut() {
+                                    pending.signature = Some(sig);
+                                }
+                            }
+                            Err(e) => match cache.on_error(&AuthError::Sign(e)) {
+                                PollAction::Retry => continue,
+                                PollAction::Stop(m) => { stop_message = Some(m); break; }
+                                PollAction::RetryWithFreshSignature => continue,
+                            }
+                        }
+                    }
+                    let sig = cache.get().expect("signature was fetched above").clone();
+                    match client.get_session_signed(&token, &sig).await {
                         Ok(session) => {
                             if let Err(e) = complete_auth(&app_clone, &state_arc, session).await {
                                 warn!("lastfm complete_auth error: {e}");
                             }
                             return;
                         }
-                        Err(e) if e.contains("not been authorised") || e.contains("14") => {
-                            // ユーザーがまだブラウザで承認していない → 継続
-                        }
                         Err(e) => {
-                            // ネットワークエラー等 → 継続（致命的でなければ）
-                            warn!("lastfm auth polling error (will retry): {e}");
+                            match cache.on_error(&e) {
+                                PollAction::Retry => warn!("lastfm auth polling error (will retry): {}", e.user_message()),
+                                PollAction::RetryWithFreshSignature => {
+                                    if let Some(pending) = state_arc.lock().unwrap().pending_auth.as_mut() {
+                                        pending.signature = None;
+                                    }
+                                }
+                                PollAction::Stop(m) => {
+                                    warn!("lastfm auth polling stopped: {}", e.user_message());
+                                    stop_message = Some(m);
+                                    break;
+                                }
+                            }
                         }
                     }
                 }
@@ -175,7 +239,7 @@ pub async fn lastfm_get_auth_token(
         app_clone
             .emit(
                 "lastfm-auth-polling",
-                serde_json::json!({ "polling": false }),
+                serde_json::json!({ "polling": false, "error": stop_message }),
             )
             .ok();
     });
@@ -189,12 +253,13 @@ pub async fn lastfm_get_session(
     app: AppHandle,
     state: tauri::State<'_, AppState>,
 ) -> Result<(), String> {
-    let token = state
+    let (token, mut signature) = state
         .0
         .lock()
         .unwrap()
-        .pending_auth_token
-        .clone()
+        .pending_auth
+        .as_ref()
+        .map(|p| (p.token.clone(), p.signature.clone()))
         .ok_or_else(|| "先に [Last.fm でログイン] をクリックしてください".to_string())?;
 
     // ポーリングを止める
@@ -203,7 +268,32 @@ pub async fn lastfm_get_session(
     }
 
     let client = state.0.lock().unwrap().lastfm_client.clone();
-    let session = client.get_session(&token).await?;
+    if signature.is_none() {
+        signature = Some(
+            client
+                .request_signature(
+                    "auth.getSession",
+                    &BTreeMap::from([("token".into(), token.clone())]),
+                )
+                .await
+                .map_err(|e| e.user_message())?,
+        );
+    }
+    let mut result = client
+        .get_session_signed(&token, signature.as_ref().unwrap())
+        .await;
+    // secret を差し替えた直後は署名が合わないことがあるので、1 回だけ取り直す
+    if matches!(&result, Err(AuthError::Lastfm(e)) if e.code == 13) {
+        let fresh = client
+            .request_signature(
+                "auth.getSession",
+                &BTreeMap::from([("token".into(), token.clone())]),
+            )
+            .await
+            .map_err(|e| e.user_message())?;
+        result = client.get_session_signed(&token, &fresh).await;
+    }
+    let session = result.map_err(|e| e.user_message())?;
 
     complete_auth(&app, &state.0, session).await
 }
@@ -214,7 +304,7 @@ pub fn lastfm_cancel_auth(state: tauri::State<'_, AppState>) {
     let mut inner = state.0.lock().unwrap();
     if let Some(cancel) = inner.auth_poll_cancel_token.take() {
         cancel.cancel();
-        inner.pending_auth_token = None;
+        inner.pending_auth = None;
         info!("lastfm auth polling cancelled by user");
     }
 }
@@ -251,14 +341,16 @@ pub async fn lastfm_logout(
     if let Ok(entry) = Entry::new(KEYRING_SERVICE, KEYRING_SESSION_KEY) {
         let _ = entry.delete_password();
     }
+    clear_session_api_key(&app);
 
     {
         let mut inner = state.0.lock().unwrap();
-        inner.pending_auth_token = None;
+        inner.pending_auth = None;
         inner.settings.lastfm_username = String::new();
         inner.auth_status = AuthStatus {
             authenticated: false,
             username: None,
+            notice: None,
         };
     }
 
@@ -296,6 +388,7 @@ pub async fn lastfm_logout(
         AuthStatus {
             authenticated: false,
             username: None,
+            notice: None,
         },
     )
     .map_err(|e| e.to_string())?;
@@ -304,19 +397,30 @@ pub async fn lastfm_logout(
 }
 
 #[tauri::command]
-pub fn lastfm_get_auth_status(state: tauri::State<'_, AppState>) -> AuthStatus {
+pub fn lastfm_get_auth_status(app: AppHandle, state: tauri::State<'_, AppState>) -> AuthStatus {
     // 起動時に keyring から session_key を確認して状態を同期する
     let has_session = load_session_key().is_some();
+    let stored_api_key = load_session_api_key(&app);
     let mut inner = state.0.lock().unwrap();
-
-    if has_session && !inner.auth_status.authenticated {
-        inner.auth_status.authenticated = true;
-        if inner.auth_status.username.is_none() && !inner.settings.lastfm_username.is_empty() {
-            inner.auth_status.username = Some(inner.settings.lastfm_username.clone());
+    match evaluate_stored_session(has_session, stored_api_key.as_deref(), inner.lastfm_client.embedded_api_key()) {
+        StoredSessionState::Valid => {
+            inner.auth_status.authenticated = true;
+            inner.auth_status.notice = None;
+            if inner.auth_status.username.is_none() && !inner.settings.lastfm_username.is_empty() {
+                inner.auth_status.username = Some(inner.settings.lastfm_username.clone());
+            }
         }
-    } else if !has_session {
-        inner.auth_status.authenticated = false;
-        inner.auth_status.username = None;
+        StoredSessionState::NotLoggedIn => {
+            inner.auth_status.authenticated = false;
+            inner.auth_status.username = None;
+            inner.auth_status.notice = None;
+        }
+        StoredSessionState::KeyChanged => {
+            inner.auth_status.authenticated = false;
+            inner.auth_status.username = None;
+            inner.auth_status.notice = Some("key_changed".into());
+            info!("lastfm session was issued for a different api_key; re-login required");
+        }
     }
 
     info!(

@@ -16,6 +16,7 @@ export interface Track {
 export interface AuthStatus {
   authenticated: boolean;
   username?: string;
+  notice?: string | null;
 }
 
 export interface DiscordStatus {

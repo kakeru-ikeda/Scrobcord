@@ -8,6 +8,14 @@ on:
   workflow_dispatch:
 
 jobs:
+  secret-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check that no Last.fm secret is referenced
+        shell: bash
+        run: bash scripts/check-no-lastfm-secret.sh
+
   build:
     permissions:
       contents: write
@@ -47,6 +55,11 @@ jobs:
             libappindicator3-dev \
             librsvg2-dev \
             patchelf
+
+      - name: Run Rust unit tests
+        if: matrix.platform == 'ubuntu-22.04'
+        working-directory: src-tauri
+        run: cargo test --lib
 
       # Windows: 自己署名証明書を生成し、Tauri override config に書き出す
       - name: Create self-signed certificate (Windows)
@@ -114,7 +127,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           LASTFM_API_KEY: ${{ secrets.LASTFM_API_KEY }}
-          LASTFM_API_SECRET: ${{ secrets.LASTFM_API_SECRET }}
           DISCORD_APP_ID: ${{ secrets.DISCORD_APP_ID }}
         with:
           tagName: ${{ github.ref_name }}
@@ -131,7 +143,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           LASTFM_API_KEY: ${{ secrets.LASTFM_API_KEY }}
-          LASTFM_API_SECRET: ${{ secrets.LASTFM_API_SECRET }}
           DISCORD_APP_ID: ${{ secrets.DISCORD_APP_ID }}
         with:
           args: ${{ env.TAURI_ARGS && format('{0} --bundles {1}', env.TAURI_ARGS, matrix.bundles) || format('--bundles {0}', matrix.bundles) }}

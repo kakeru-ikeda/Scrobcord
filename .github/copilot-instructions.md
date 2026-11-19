@@ -27,7 +27,7 @@ Scrobcord は **Last.fm scrobble → Discord Rich Presence** 送信に特化し�
 - すべての Tauri コマンドは `commands/` 配下のモジュールに定義し、`lib.rs` で `invoke_handler` に登録する
 - サービスロジック（API 呼び出し・IPC 通信）は `services/` に実装し、コマンド層から呼び出す
 - `AppState` は `Arc<Mutex<...>>` で保持し、`tauri::State` で受け取る
-- `session_key` / `api_secret` は **必ず keyring crate 経由で OS キーチェーンに保存**し、ファイルや Store への平文書き込みを禁止する
+- `session_key` は **必ず keyring crate 経由で OS キーチェーンに保存**し、ファイルや Store への平文書き込みを禁止する
 - エラーは `Result<T, String>` で Tauri コマンド境界まで伝播させる
 - 非同期処理は `tokio::spawn` を使用し、ポーリングループには停止用の `CancellationToken` を必ず持たせる
 
@@ -46,16 +46,17 @@ Scrobcord は **Last.fm scrobble → Discord Rich Presence** 送信に特化し�
 | ------------------------ | ----------------------------------------------- |
 | `track-changed`          | `{ track: Track \| null }`                      |
 | `discord-status-changed` | `{ connected: boolean, error?: string }`        |
-| `lastfm-status-changed`  | `{ authenticated: boolean, username?: string }` |
+| `lastfm-status-changed`  | `{ authenticated: boolean, username?: string, notice?: string }` |
+| `lastfm-auth-polling`    | `{ polling: boolean, error?: string }`           |
 | `polling-status-changed` | `{ running: boolean }`                          |
 
 ---
 
 ## セキュリティ要件
 
-- `api_secret` / `session_key` を平文でファイル・ストアに保存しない
+- `session_key` を平文でファイル・ストアに保存しない
 - ユーザー入力のフォーマット文字列（`{track}` 等）はホワイトリスト方式で置換し、任意コード実行を防ぐ
-- Last.fm API 署名は MD5(パラメータ文字列 + api_secret) — DESIGN.md の仕様に従う
+- Last.fm API の署名は、署名サービス scrobsign(`services/scrobsign.rs`)から受け取る。アプリは api_secret を持たない
 
 ---
 

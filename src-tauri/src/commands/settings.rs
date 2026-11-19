@@ -114,6 +114,7 @@ pub async fn reset_saved_data(
         STORE_KEY,
         serde_json::to_value(&defaults).map_err(|e| e.to_string())?,
     );
+    store.delete(crate::commands::auth::STORE_SESSION_API_KEY);
     store.save().map_err(|e| format!("store save: {e}"))?;
 
     // 4) 実行中タスクとメモリ状態をリセット
@@ -145,13 +146,14 @@ pub async fn reset_saved_data(
         inner.auth_status = AuthStatus {
             authenticated: false,
             username: None,
+            notice: None,
         };
         inner.discord_status = DiscordStatus {
             connected: false,
             error: None,
         };
         inner.now_playing = None;
-        inner.pending_auth_token = None;
+        inner.pending_auth = None;
     }
 
     // 5) フロントへ状態更新通知
@@ -160,6 +162,7 @@ pub async fn reset_saved_data(
         AuthStatus {
             authenticated: false,
             username: None,
+            notice: None,
         },
     )
     .map_err(|e| e.to_string())?;
@@ -211,6 +214,7 @@ mod tests {
             poll_interval_secs: 30,
             start_on_login: true,
             minimize_to_tray: true,
+            start_minimized: false,
             language: "en".to_string(),
         };
         let json = serde_json::to_string(&original).unwrap();

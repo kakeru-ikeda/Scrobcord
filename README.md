@@ -65,8 +65,7 @@ Last.fm で再生中の楽曲を自動検出し、Discord のプロフィール�
 
 **Last.fm API キー**
 
-1. [Last.fm API アカウント作成ページ](https://www.last.fm/api/account/create) でアプリを登録する
-2. **API Key** と **Shared Secret** を取得する
+`LASTFM_API_KEY` は署名サービス scrobsign に登録されたアプリ `scrobcord` の api_key です。秘密情報ではなく、値は `src-tauri/.env.example` にあります。この値と異なる api_key でビルドすると、ログイン時に「api_key が一致しません」というエラーになります。
 
 **Discord Application**
 
@@ -74,13 +73,16 @@ Last.fm で再生中の楽曲を自動検出し、Discord のプロフィール�
 2. **Application ID** をコピーする
 3. **Rich Presence → Art Assets** で `lastfm_icon` 等の画像をアップロードする（省略可）
 
-リポジトリルートに `.env` ファイルを作成し、以下を記入する：
+`src-tauri/.env` ファイルを作成し、以下を記入する：
 
 ```env
-LASTFM_API_KEY=your_api_key_here
-LASTFM_API_SECRET=your_api_secret_here
+LASTFM_API_KEY=3c209aa3012b54652e6cbe6be58e1075
 DISCORD_APP_ID=your_application_id_here
 ```
+
+### Last.fm の署名について
+
+Scrobcord は Last.fm の api_secret を持ちません。認証(`auth.getToken`、`auth.getSession`)の署名は署名サービス scrobsign(`https://scrobsign.sukisuki.club`)から受け取ります。署名サービスは署名に必要なパラメータ(認証の token。scrobble するアプリでは session key(sk)と曲のメタデータ)を受け取りますが、保存せず、ログにも値を残しません。再生履歴などの読み取りは署名サービスを通さず Last.fm に直接問い合わせます。旧版(v0.0.4 以前)から更新すると Last.fm のキーが変わるため、1 回の再ログインが必要です。
 
 ### 手順
 
