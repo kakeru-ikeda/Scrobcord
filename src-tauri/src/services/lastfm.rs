@@ -10,6 +10,36 @@ use crate::services::{
 
 const API_ROOT: &str = "https://ws.audioscrobbler.com/2.0/";
 
+pub(crate) fn interpret_read_response(
+    status: u16,
+    body: &str,
+) -> Result<serde_json::Value, String> {
+    match serde_json::from_str(body) {
+        Ok(value) => {
+            if let Some(err) = auth_flow::parse_lastfm_error(&value) {
+                return Err(match err.code {
+                    11 | 16 | 29 => {
+                        format!("transient: Last.fm error {}: {}", err.code, err.message)
+                    }
+                    10 | 26 => format!(
+                        "Last.fm のサービス側の問題です（error {}）: {}",
+                        err.code, err.message
+                    ),
+                    _ => format!("Last.fm error {}: {}", err.code, err.message),
+                });
+            }
+            Ok(value)
+        }
+        Err(_) if status == 429 || status >= 500 => {
+            Err(format!("transient: Last.fm HTTP {status} error"))
+        }
+        Err(_) => Err(format!(
+            "Last.fm returned non-JSON (HTTP {status}, {} bytes)",
+            body.len()
+        )),
+    }
+}
+
 // ビルド時に環境変数 LASTFM_API_KEY(新しいキーの api_key。秘密ではない)を埋め込む
 const EMBEDDED_API_KEY: &str = match option_env!("LASTFM_API_KEY") {
     Some(k) => k,
@@ -143,7 +173,7 @@ impl LastfmClient {
             ])
             .send()
             .await
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| e.without_url().to_string())?;
 
         let status = response.status();
         let body = response
@@ -151,20 +181,7 @@ impl LastfmClient {
             .await
             .map_err(|e| format!("failed to read response: {e}"))?;
 
-        if status.is_server_error() || status.is_client_error() {
-            return Err(format!("transient: Last.fm HTTP {} error", status.as_u16()));
-        }
-
-        let resp: serde_json::Value = serde_json::from_str(&body).map_err(|e| {
-            format!(
-                "Last.fm returned non-JSON ({e}): {}",
-                &body[..body.len().min(300)]
-            )
-        })?;
-
-        if let Some(err_msg) = resp["message"].as_str() {
-            return Err(format!("Last.fm error: {err_msg}"));
-        }
+        let resp = interpret_read_response(status.as_u16(), &body)?;
 
         let tracks = resp["recenttracks"]["track"]
             .as_array()
@@ -256,7 +273,7 @@ impl LastfmClient {
             username, page, limit
         );
 
-        let body = self
+        let response = self
             .client
             .get(API_ROOT)
             .query(&[
@@ -269,20 +286,13 @@ impl LastfmClient {
             ])
             .send()
             .await
-            .map_err(|e| e.to_string())?
+            .map_err(|e| e.without_url().to_string())?;
+        let status = response.status();
+        let body = response
             .text()
             .await
-            .map_err(|e| format!("failed to read response: {e}"))?;
-        let resp: serde_json::Value = serde_json::from_str(&body).map_err(|e| {
-            format!(
-                "Last.fm returned non-JSON ({e}): {}",
-                &body[..body.len().min(300)]
-            )
-        })?;
-
-        if let Some(err_msg) = resp["message"].as_str() {
-            return Err(format!("Last.fm error: {err_msg}"));
-        }
+            .map_err(|e| e.without_url().to_string())?;
+        let resp = interpret_read_response(status.as_u16(), &body)?;
 
         let recent = &resp["recenttracks"];
 
@@ -371,5 +381,49 @@ impl LastfmClient {
             total_pages,
             total_tracks,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::interpret_read_response;
+
+    #[test]
+    fn interprets_read_response_errors_from_the_body() {
+        assert_eq!(
+            interpret_read_response(200, r#"{"recenttracks":{"track":[]}}"#),
+            Ok(serde_json::json!({"recenttracks":{"track":[]}}))
+        );
+
+        for code in [26, 10] {
+            let error = interpret_read_response(
+                403,
+                &format!(r#"{{"error":{code},"message":"Suspended API key"}}"#),
+            )
+            .unwrap_err();
+            assert!(error.contains("サービス側の問題"));
+            assert!(!error.starts_with("transient:"));
+        }
+
+        assert_eq!(
+            interpret_read_response(400, r#"{"error":6,"message":"User not found"}"#)
+                .unwrap_err(),
+            "Last.fm error 6: User not found"
+        );
+
+        assert!(interpret_read_response(
+            500,
+            r#"{"error":16,"message":"Temporary error"}"#
+        )
+        .unwrap_err()
+        .starts_with("transient:"));
+
+        assert!(interpret_read_response(502, "<html>upstream error</html>")
+            .unwrap_err()
+            .starts_with("transient:"));
+
+        let error = interpret_read_response(404, "<html>not found</html>").unwrap_err();
+        assert!(error.contains("non-JSON"));
+        assert!(!error.starts_with("transient:"));
     }
 }
