@@ -211,6 +211,7 @@ mod tests {
             poll_interval_secs: 30,
             start_on_login: true,
             minimize_to_tray: true,
+            start_minimized: false,
             language: "en".to_string(),
         };
         let json = serde_json::to_string(&original).unwrap();
