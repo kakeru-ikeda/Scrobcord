@@ -64,7 +64,7 @@ pub fn run() {
         now_playing: None,
         poll_cancel_token: None,
         discord_client: Arc::new(Mutex::new(DiscordRpcClient::new(String::new()))),
-        pending_auth_token: None,
+        pending_auth: None,
         auth_poll_cancel_token: None,
         lastfm_client: LastfmClient::new(),
     })));

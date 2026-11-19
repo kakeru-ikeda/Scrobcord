@@ -151,7 +151,7 @@ pub async fn reset_saved_data(
             error: None,
         };
         inner.now_playing = None;
-        inner.pending_auth_token = None;
+        inner.pending_auth = None;
     }
 
     // 5) フロントへ状態更新通知

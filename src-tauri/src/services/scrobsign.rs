@@ -1,12 +1,38 @@
-#![allow(dead_code)] // Task 2 で外す
-
 use std::collections::BTreeMap;
+use std::time::Duration;
 
 pub const SCROBSIGN_URL: &str = "https://scrobsign.sukisuki.club";
 pub const RESERVED_PARAMS: [&str; 5] = ["api_key", "api_sig", "method", "format", "callback"];
 
 pub fn sign_endpoint() -> String {
     format!("{SCROBSIGN_URL}/v1/scrobcord/sign")
+}
+
+pub async fn request_signature(
+    client: &reqwest::Client,
+    method: &str,
+    params: &BTreeMap<String, String>,
+) -> Result<Signature, SignError> {
+    let body = build_sign_request_body(method, params)?;
+    let response = client
+        .post(sign_endpoint())
+        .header(reqwest::header::CONTENT_TYPE, "application/json")
+        .timeout(Duration::from_secs(15))
+        .body(body)
+        .send()
+        .await
+        .map_err(|e| SignError::Transport(e.without_url().to_string()))?;
+    let status = response.status().as_u16();
+    let retry_after = response
+        .headers()
+        .get(reqwest::header::RETRY_AFTER)
+        .and_then(|v| v.to_str().ok())
+        .map(str::to_owned);
+    let body = response
+        .text()
+        .await
+        .map_err(|e| SignError::Transport(e.without_url().to_string()))?;
+    parse_sign_response(status, retry_after.as_deref(), &body)
 }
 
 #[derive(Clone, PartialEq, Eq)]
