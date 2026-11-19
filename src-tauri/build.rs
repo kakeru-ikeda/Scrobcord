@@ -1,6 +1,6 @@
 fn main() {
     // .env ファイルが存在すればビルド時環境変数として読み込む
-    // → option_env!("LASTFM_API_KEY") 等で参照可能になる
+    // → option_env!("LASTFM_API_KEY") 等で参照可能になる(LASTFM_API_KEY は新しいキーの api_key。秘密ではない。署名は scrobsign が行う)
     println!("cargo:rerun-if-changed=.env");
     if let Ok(contents) = std::fs::read_to_string(".env") {
         for line in contents.lines() {
